@@ -61,5 +61,4 @@ List.prototype.draw = function (cache) {
     // Automatially scroll to the bottom as new tweets are added
     var elem = document.getElementById(_self.contentDiv);
     elem.scrollTop = elem.scrollHeight;
-
 }

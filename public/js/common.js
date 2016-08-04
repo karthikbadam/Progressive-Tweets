@@ -8,40 +8,44 @@ var Feedback = {
 
         var _self = context;
 
+        var progressHeight = 20;
+
         _self.progressCurrentDiv = d3.select('#'+divID).append("div")
             .attr("id", "progressDivCurrent")
             .style("background-color", progressColor)
-            .style("height", "30px")
+            .style("height", progressHeight + "px")
             .style("width", "0%")
             .style("display", "inline-block")
             .style("vertical-align", "middle")
             .attr("align", "right");
 
         _self.progressCurrentDiv.append("span")
+            .style("font-size", "11px")
             .style("position", "relative")
-            .style("top", "10%")
-            .style("margin-right", "5px");
+            .style("margin-right", "3px");
 
         _self.progressTotalDiv = d3.select('#'+divID).append("div")
             .attr("id", "progressDivTotal")
             .style("background-color", "white")
-            .style("height", "30px")
+            .style("height", progressHeight + "px")
             .style("width", "100%")
             .style("display", "inline-block")
             .style("vertical-align", "middle")
             .style("vertical-align", "middle")
+            .style("overflow", "hidden")
             .attr("align", "right");
 
-        _self.progressTotalDiv.append("span").style("position", "relative")
-            .style("top", "10%");
+        _self.progressTotalDiv.append("span")
+            .style("font-size", "11px")
+            .style("position", "relative");
 
         _self.tweetContentDiv = d3.select('#'+divID).append("div")
             .attr("id", "content"+divID)
             .style("background-color", "white")
-            .style("height", "95%")
+            .style("height", ($('#'+divID).height() - progressHeight) + "px")
             .style("width", "100%")
             .style("display", "inline-block")
-            .style("overflow", "scroll")
+            .style("overflow", "hidden")
             .style("position", "relative");
 
         return "content"+divID;

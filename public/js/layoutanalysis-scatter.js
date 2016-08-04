@@ -22,11 +22,11 @@ function Scatter(options) {
         }
     });
 
-    var margin = {
-            top: 20,
-            right: 20,
+    var margin = _self.margin = {
+            top: 5,
+            right: 5,
             bottom: 40,
-            left: 20
+            left: 5
         },
         width = $("#" + contentDiv).width() - margin.left - margin.right,
         height = $("#" + contentDiv).height() - margin.top - margin.bottom;
@@ -57,8 +57,8 @@ function Scatter(options) {
 
                 _self.rectWidth = d3.event.selection[1][0] - d3.event.selection[0][0];
                 _self.rectHeight = d3.event.selection[1][1] - d3.event.selection[0][1];
-                _self.rectLeft = d3.event.selection[0][0] + 20;
-                _self.rectTop = d3.event.selection[0][1] + 20;
+                _self.rectLeft = d3.event.selection[0][0] + _self.margin.left;
+                _self.rectTop = d3.event.selection[0][1] + _self.margin.top;
 
                 var xdomain = xSelection.map(_self.x.invert).sort(function (a, b) {
                     return a - b;
@@ -195,18 +195,20 @@ Scatter.prototype.drawKeywords = function (allKeywords) {
     _self.keywordDiv = d3.select('#' + _self.contentDiv).append("div")
         .attr("id", "keywordDiv")
         .style("background-color", "transparent")
-        .style("height", _self.rectHeight+"px")
-        .style("width", _self.rectWidth+"px")
+        .style("height", _self.rectHeight + "px")
+        .style("width", _self.rectWidth + "px")
         .style("display", "inline-block")
         .style("position", "absolute")
-        .style("left", _self.rectLeft+"px")
-        .style("top", _self.rectTop+"px");
+        .style("pointer-events", "none")
+        .style("left", _self.rectLeft + "px")
+        .style("top", _self.rectTop + "px");
 
-    _self.keywordbar = new KeywordBar("keywordDiv", _self.popularKeywords, _self.rectWidth, _self.rectHeight);
-
+    _self.keywordDefaultSize = 150;
+    _self.keywordbar = new KeywordBar("keywordDiv", _self.popularKeywords,
+        _self.rectWidth > _self.keywordDefaultSize / 2 ? _self.rectWidth : _self.keywordDefaultSize / 2,
+        _self.rectHeight > _self.keywordDefaultSize ? _self.rectHeight : _self.keywordDefaultSize);
 
 }
-
 
 function KeywordBar(parentDiv, data, rectWidth, rectHeight) {
 
@@ -237,6 +239,8 @@ function KeywordBar(parentDiv, data, rectWidth, rectHeight) {
     var svg = _self.svg = d3.select("#" + parentDiv).append("svg")
         .attr("width", width + margin.left + margin.right)
         .attr("height", height + margin.top + margin.bottom)
+        .style("background-color", "rgba(255, 255, 255, 0.8)")
+        .style("pointer-events", "none")
         .append("g")
         .attr("transform", "translate(" + margin.left + "," + margin.top + ")");
 
@@ -267,12 +271,12 @@ function KeywordBar(parentDiv, data, rectWidth, rectHeight) {
             return _self.x(d.value);
         })
         .style("fill", function (d, i) {
-            return "#222";
+            return "#EEE";
         })
         .style("stroke", function (d, i) {
-            return "#222";
+            return "#888";
         })
-        .style("fill-opacity", 0.5);
+        .style("fill-opacity", 0.8);
 
     selection.transition().duration(10)
         .attr("y", function (d, i) {
@@ -286,12 +290,12 @@ function KeywordBar(parentDiv, data, rectWidth, rectHeight) {
             return _self.x(d.value);
         })
         .style("fill", function (d, i) {
-            return "#222";
+            return "#EEE";
         })
         .style("stroke", function (d, i) {
-            return "#222";
+            return "#888";
         })
-        .style("fill-opacity", 0.5);
+        .style("fill-opacity", 0.8);
 
     selection.exit().transition().duration(10).remove();
 
@@ -304,13 +308,13 @@ function KeywordBar(parentDiv, data, rectWidth, rectHeight) {
         .transition().duration(10)
         .attr("class", "annotation")
         .attr("y", function (d, i) {
-            return _self.y(d.key) + _self.y.bandwidth()/2;
+            return _self.y(d.key) + _self.y.bandwidth() / 2;
         })
         .attr("x", function (d) {
             return 3;
         })
         .attr("fill", function (d, i) {
-            return "#FFF";
+            return "#222";
         })
         .attr("font-size", "9px")
         .text(function (d, i) {
@@ -320,13 +324,13 @@ function KeywordBar(parentDiv, data, rectWidth, rectHeight) {
 
     annotation.transition().duration(10)
         .attr("y", function (d, i) {
-            return _self.y(d.key) + _self.y.bandwidth()/2;
+            return _self.y(d.key) + _self.y.bandwidth() / 2;
         })
         .attr("x", function (d) {
             return 3;
         })
         .attr("fill", function (d, i) {
-            return "#FFF";
+            return "#222";
         })
         .attr("font-size", "9px")
         .style("fill-opacity", 1)

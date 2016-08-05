@@ -1,5 +1,4 @@
 import Settings
-import logging
 import tornado.escape
 import tornado.ioloop
 import tornado.web as web
@@ -21,6 +20,7 @@ from sklearn.manifold import TSNE
 from sklearn.feature_extraction.text import TfidfVectorizer
 from sklearn.metrics.pairwise import linear_kernel
 import re, nltk, json
+from nltk import ngrams
 from nltk.stem.porter import PorterStemmer
 from nltk.corpus import stopwords
 from gensim import corpora, models
@@ -37,21 +37,24 @@ layoutStop = False
 contentCache = []
 totalLines = 1
 
-#thread_pool = ProcessPoolExecutor(100)
+# thread_pool = ProcessPoolExecutor(100)
 thread_pool = ThreadPoolExecutor(200)
 distance = np.zeros([1, 1])
 
 ## -------------------------------------------------------------------
 stemmer = PorterStemmer()
 
-def jaccard (set_1, set_2):
-    return  1 - len (set_1.intersection (set_2)) / float (len (set_1.union (set_2)))
+
+def jaccard(set_1, set_2):
+    return 1 - len(set_1.intersection(set_2)) / float(len(set_1.union(set_2)))
+
 
 def stem_tokens(tokens, stemmer):
     stemmed = []
     for item in tokens:
         stemmed.append(stemmer.stem(item))
     return stemmed
+
 
 def tokenize(text):
     text = re.sub("[^a-zA-Z]", " ", text)  # Removing numbers and punctuation
@@ -63,14 +66,16 @@ def tokenize(text):
     tokens = nltk.pos_tag(tokens)
     return tokens
 
+
 stopset = stopwords.words('english')
-freq_words = ['http', 'https', 'amp', 'com', 'co', 'th']
+freq_words = ['http', 'https', 'amp', 'com', 'co', 'th', 'tweetdebate', 'debate']
 for i in freq_words:
     stopset.append(i)
 
 textCorpus = []
 
-def generateKeywords (tweet):
+
+def generateKeywords(tweet):
     tweet = re.sub("[^a-zA-Z]", " ", tweet)  # Removing numbers and punctuation
     tweet = re.sub(" +", " ", tweet)  # Removing extra white space
     tweet = re.sub("\\b[a-zA-Z0-9]{0,1}\\b", " ", tweet)  # Removing single characters (e.g k, K)
@@ -79,10 +84,22 @@ def generateKeywords (tweet):
 
     currentDoc = []
     for word in range(len(temp)):
-        if temp[word][0] not in stopset and temp[word][1] not in ["DT", "IN"]:
-            currentDoc.append(temp[word][0])
+        if temp[word][0] not in stopset and temp[word][1] in ["NN", "NNP", "NNS", "NNPS", "VBD", "VB", "VBG", "VBN",
+                                                              "VBP", "VBZ"]:
+            currentDoc.append(temp[word][0].lower())
+
+    # bigrams = ngrams(nltk.word_tokenize(tweet.lower().strip()), 2)
+    bigrams = list(ngrams(currentDoc, 2))
+
+    newDoc = []
+
+    for bigram in bigrams:
+        newDoc.append(bigram[0] + " " + bigram[1])
+        currentDoc.append(bigram[0] + " " + bigram[1])
 
     return currentDoc
+    # return newDoc
+
 
 def generate(tweet):
     temp = tokenize(tweet)
@@ -92,6 +109,7 @@ def generate(tweet):
             currentDoc.append(temp[word][0])
 
         textCorpus.append(currentDoc)
+
 
 def analyzeTopic():
     dictionary = corpora.Dictionary(textCorpus)
@@ -107,7 +125,7 @@ def analyzeTopic():
         topics.append(ldamodel.print_topic(i))
 
     print '\n'
-    send('topics information', topics)
+    # send('topics information', topics)
 
 
 def analyzeTSNE(X):
@@ -117,7 +135,7 @@ def analyzeTSNE(X):
 
 ## Currently for csv files or tsv files
 @gen.coroutine
-def readFileProgressive (data, client):
+def readFileProgressive(data, client):
     global renderStop
     global totalLines
     filename = data["content"]
@@ -145,7 +163,7 @@ def readFileProgressive (data, client):
 
                 bytesRead = bytesRead + len(line)
                 linesRead = lineNumber
-                totalLines = (linesRead/bytesRead) * totalSize
+                totalLines = (linesRead / bytesRead) * totalSize
 
                 values = line.strip().split("\t")
                 for i, value in enumerate(values):
@@ -154,7 +172,7 @@ def readFileProgressive (data, client):
                 cache.append({"content": tweetDatum["content"],
                               "sentiment": tweetDatum["rating.1"],
                               "author": tweetDatum["author.name"],
-                              "id": counter-1})
+                              "id": counter - 1})
 
                 counter = counter + 1
 
@@ -179,12 +197,12 @@ def readFileProgressive (data, client):
                     if renderStop == True:
                         break
 
-                    client.send_message ("file content", message)
+                    client.send_message("file content", message)
 
                     cache = []
                     counter = 1
 
-                time.sleep(0.02)
+                time.sleep(0.04)
 
                 lineNumber = lineNumber + 1
 
@@ -197,37 +215,38 @@ def readFileProgressive (data, client):
 #         tweets.append(tweet)
 #     return data["chunkSize"], tweets[:]
 
-def sliceTweets (data):
+def sliceTweets(data):
     global contentCache
     index = data["content"]
     return data["chunkSize"], contentCache[:index], contentCache[index]
 
-def tokenizeTweets (data):
+
+def tokenizeTweets(data):
     return generateKeywords(data["content"])
 
-def layoutGenerationProgressive (data, client):
+
+def layoutGenerationProgressive(data, client):
     global distance
 
     chunkSize, tweetsCopy, current = sliceTweets(data)
     size = data["content"] + 1
 
-    if  size == 1:
+    if size == 1:
         distance[0][0] = 0
     else:
         distance.resize(size, size)
 
         for i, cTweet in enumerate(tweetsCopy):
+            distance[size - 1][i] = jaccard(set(cTweet["keywords"]), set(current["keywords"]))
+            distance[i][size - 1] = jaccard(set(cTweet["keywords"]), set(current["keywords"]))
 
-            distance[size-1][i] = jaccard(set(cTweet["keywords"]), set(current["keywords"]))
-            distance[i][size-1] = jaccard(set(cTweet["keywords"]), set(current["keywords"]))
-
-        distance[size-1][size-1] = 0
+        distance[size - 1][size - 1] = 0
 
     layoutPacketCounter = size
 
     if layoutPacketCounter % chunkSize == 0 and layoutPacketCounter >= chunkSize:
-        #tfidf = TfidfVectorizer().fit_transform(tweetsCopy)
-        #similarities = linear_kernel(tfidf, tfidf)
+        # tfidf = TfidfVectorizer().fit_transform(tweetsCopy)
+        # similarities = linear_kernel(tfidf, tfidf)
 
         model = TSNE(n_components=2, init='pca', random_state=1, method='barnes_hut', n_iter=200, verbose=2)
         spatialData = model.fit_transform(np.copy(distance))
@@ -251,7 +270,7 @@ def layoutGenerationProgressive (data, client):
 
 
 ## Progressive topic modeling
-def topicModellingProgressive (data, client):
+def topicModellingProgressive(data, client):
     global layoutStop
 
     tweet = data["content"]
@@ -269,21 +288,31 @@ def topicModellingProgressive (data, client):
         generate(cache)
         cache = []
 
+
 ## -------------------------------------------------------------------
 ## Working with websockets
+
 clients = []
 
-def wrapMessage (event, message):
+
+def wrapMessage(event, message):
     msgObject = {}
     msgObject["event"] = event
     msgObject["content"] = message
     return json.dumps(msgObject)
 
-def unWrapMessage (message):
+
+def unWrapMessage(message):
     message = json.loads(message)
     event = message["event"]
     data = message["content"]
     return event, data
+
+
+def keywordDistribution(message):
+    print "I AM HERE 2!----------------------------------------------------------!!!" + str(message)
+    ids = message["content"]
+
 
 @gen.coroutine
 def handleEvent(client, event, message):
@@ -292,12 +321,27 @@ def handleEvent(client, event, message):
         future = thread_pool.submit(readFileProgressive, message, client)
 
     if event == "request layout":
-        #message["keywords"] = tokenizeTweets(message)
+        # message["keywords"] = tokenizeTweets(message)
         future = thread_pool.submit(layoutGenerationProgressive, message, client)
 
     if event == "request tweets":
-        #message["keywords"] = tokenizeTweets(message)
+        # message["keywords"] = tokenizeTweets(message)
         future = thread_pool.submit(layoutGenerationProgressive, message, client)
+
+    if event == "request keywords":
+        ids = message["content"]
+        returnKeywords = []
+        for index in ids:
+            returnKeywords.extend(contentCache[index]["keywords"])
+
+        message = {}
+        message["id"] = 1
+        message["content"] = returnKeywords
+        message["absolute-progress"] = {
+            "current": 100,
+            "total": 100
+        }
+        client.send_message("keyword content", message)
 
 
 class SocketHandler(tornado.websocket.WebSocketHandler):
@@ -308,15 +352,15 @@ class SocketHandler(tornado.websocket.WebSocketHandler):
     @gen.coroutine
     def initialize(self):
         logger.info("Connection initiated")
-        self.redis = tornadis.Client()
-        loop = tornado.ioloop.IOLoop.current()
-        loop.add_callback(self.watch_redis)
+        # self.redis = tornadis.Client()
+        # loop = tornado.ioloop.IOLoop.current()
+        # loop.add_callback(self.watch_redis)
 
-    @gen.coroutine
-    def watch_redis(self):
-        while True:
-            response = yield self.redis.call('BLPOP', 'ws-queue', 0)
-            self.write_message(response[1])
+    # @gen.coroutine
+    # def watch_redis(self):
+    #     while True:
+    #         response = yield self.redis.call('BLPOP', 'ws-queue', 0)
+    #         self.write_message(response[1])
 
     def on_message(self, message):
         event, message = unWrapMessage(message)
@@ -344,7 +388,7 @@ class SocketHandler(tornado.websocket.WebSocketHandler):
     @gen.coroutine
     def send_message(self, event, message):
         logger.info("event " + str(event))
-        to_send = wrapMessage (event, message)
+        to_send = wrapMessage(event, message)
         self.write_message(to_send)
 
 
@@ -366,29 +410,31 @@ class Application(tornado.web.Application):
         }
         tornado.web.Application.__init__(self, handlers, **settings)
 
-class SentimentHandler(tornado.web.RequestHandler):
 
+class SentimentHandler(tornado.web.RequestHandler):
     @gen.coroutine
     def get(self):
         self.render("sentiment.html")
 
-class LoadHandler(tornado.web.RequestHandler):
 
+class LoadHandler(tornado.web.RequestHandler):
     @tornado.gen.coroutine
     def get(self):
         self.render("load.html")
 
-class TopicHandler(tornado.web.RequestHandler):
 
+class TopicHandler(tornado.web.RequestHandler):
     @tornado.gen.coroutine
     def get(self):
         self.render("topic.html")
 
-#if __name__ == "__main__":
+
+# if __name__ == "__main__":
 def main():
     application = Application()
     application.listen(3000)
     tornado.ioloop.IOLoop.instance().start()
 
-#tornado.ioloop.IOLoop.instance().run_sync(main)
+
+# tornado.ioloop.IOLoop.instance().run_sync(main)
 main()

@@ -6,7 +6,7 @@ function Scatter(options) {
 
     var _self = this;
 
-    var parentDiv = _self.parentDiv = "clusterDiv";
+    var parentDiv = _self.parentDiv = "content-right";
 
     var contentDiv = _self.contentDiv = Feedback.addProgressBar(parentDiv, _self);
 
@@ -57,12 +57,14 @@ function Scatter(options) {
 
                 _self.rectWidth = d3.event.selection[1][0] - d3.event.selection[0][0];
                 _self.rectHeight = d3.event.selection[1][1] - d3.event.selection[0][1];
+
                 _self.rectLeft = d3.event.selection[0][0] + _self.margin.left;
                 _self.rectTop = d3.event.selection[0][1] + _self.margin.top;
 
                 var xdomain = xSelection.map(_self.x.invert).sort(function (a, b) {
                     return a - b;
                 });
+
                 var ydomain = ySelection.map(_self.y.invert).sort(function (a, b) {
                     return a - b;
                 });
@@ -82,7 +84,6 @@ function Scatter(options) {
 
                     //sending ids to the server
                     socket.send(wrapMessage("request keywords", {content: ids, chunkSize: 30}));
-
                 }
             }
         });

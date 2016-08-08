@@ -172,10 +172,7 @@ $(document).ready(function () {
 
         userBar.draw(users, progress);
 
-
-
     });
-
 
     // Create Tweet List
     list = new List ();

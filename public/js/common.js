@@ -20,7 +20,9 @@ var Feedback = {
             .attr("align", "right");
 
         _self.progressCurrentDiv.append("span")
-            .style("font-size", "11px")
+            .style("font-size", function () {
+                return getFontSize(this, $("#"+divID).width());
+            })
             .style("position", "relative")
             .style("margin-right", "3px");
 
@@ -42,7 +44,7 @@ var Feedback = {
         _self.tweetContentDiv = d3.select('#'+divID).append("div")
             .attr("id", "content"+divID)
             .style("background-color", "white")
-            .style("height", ($('#'+divID).height() - progressHeight) + "px")
+            .style("height", ($('#'+divID).height() - progressHeight - 2) + "px")
             .style("width", "100%")
             .style("display", "inline-block")
             .style("overflow", "hidden")
@@ -97,5 +99,9 @@ var Feedback = {
             .on("click", expandhandler);
 
     },
+}
 
+function getFontSize (element, width) {
+    return 11+"px";
+    return Math.min(width, (width - 8) / element.getComputedTextLength() * 24) + "px";
 }

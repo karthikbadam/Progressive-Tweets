@@ -25,7 +25,7 @@ function HorizontalBar(options) {
 
 
     var margin = {
-            top: 20,
+            top: 5,
             right: 20,
             bottom: 40,
             left: 110

@@ -23,8 +23,8 @@ import re, nltk, json
 from nltk import ngrams
 from nltk.stem.porter import PorterStemmer
 from nltk.corpus import stopwords
-from gensim import corpora, models
 import gensim
+from gensim import corpora, models
 import logging
 
 ## Logging all the messages
@@ -326,7 +326,7 @@ def handleEvent(client, event, message):
 
     if event == "request tweets":
         # message["keywords"] = tokenizeTweets(message)
-        future = thread_pool.submit(layoutGenerationProgressive, message, client)
+            future = thread_pool.submit(layoutGenerationProgressive, message, client)
 
     if event == "request keywords":
         ids = message["content"]

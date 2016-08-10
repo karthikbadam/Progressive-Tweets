@@ -1,0 +1,13 @@
+Server
+[ ] Stop a thread using global variable
+[ ] Fix why a new future is not working
+[ ] Reorganize code
+[ ] Scikit-learn get measures to use for progress
+
+Client
+[ ] Add sliders and checkboxes for the configuration
+[ ] Rethink the design of the buttons
+[ ] Augment progress bars with distribution information
+
+
+

@@ -99,6 +99,22 @@ var Feedback = {
             .on("click", expandhandler);
 
     },
+
+    addControlMaximize: function (divID, context, expandhandler) {
+
+        var _self = context;
+
+        _self.maxControlDiv = d3.select('#'+divID).append("div")
+            .attr("id", "maxcontrol"+divID)
+            .style("background-color", "transparent")
+            .style("height", "200px")
+            .style("display", "inline-block");
+
+
+
+
+
+    }
 }
 
 function getFontSize (element, width) {

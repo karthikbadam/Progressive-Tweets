@@ -24,7 +24,7 @@ function Bar(options) {
 
     var margin = {
             top: 5,
-            right: 20,
+            right: 5,
             bottom: 40,
             left: 40
         },

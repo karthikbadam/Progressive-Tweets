@@ -110,6 +110,11 @@ var Feedback = {
             .style("height", "200px")
             .style("display", "inline-block");
 
+        _self.maxControlDiv = d3.select('#'+divID).append("div")
+            .attr("id", "maxcontrol"+divID)
+            .style("background-color", "transparent")
+            .style("height", "200px")
+            .style("display", "inline-block");
 
 
 

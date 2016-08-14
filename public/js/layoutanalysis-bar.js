@@ -10,17 +10,7 @@ function Bar(options) {
 
     var contentDiv = Feedback.addProgressBar(parentDiv, _self);
 
-    _self.expanded = false;
-
-    Feedback.addControlMinimize(parentDiv, _self, function () {
-        if (!_self.expanded) {
-            $("#"+parentDiv).animate({height: '+=200'});
-            _self.expanded = true;
-        } else {
-            $("#"+parentDiv).animate({height: '-=200'});
-            _self.expanded = false;
-        }
-    });
+    Feedback.addControlMinimize(parentDiv, _self);
 
     var margin = {
             top: 5,

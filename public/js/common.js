@@ -10,7 +10,7 @@ var Feedback = {
 
         var progressHeight = 20;
 
-        _self.progressCurrentDiv = d3.select('#'+divID).append("div")
+        _self.progressCurrentDiv = d3.select('#' + divID).append("div")
             .attr("id", "progressDivCurrent")
             .style("background-color", progressColor)
             .style("height", progressHeight + "px")
@@ -21,12 +21,12 @@ var Feedback = {
 
         _self.progressCurrentDiv.append("span")
             .style("font-size", function () {
-                return getFontSize(this, $("#"+divID).width());
+                return getFontSize(this, $("#" + divID).width());
             })
             .style("position", "relative")
             .style("margin-right", "3px");
 
-        _self.progressTotalDiv = d3.select('#'+divID).append("div")
+        _self.progressTotalDiv = d3.select('#' + divID).append("div")
             .attr("id", "progressDivTotal")
             .style("background-color", "white")
             .style("height", progressHeight + "px")
@@ -41,24 +41,24 @@ var Feedback = {
             .style("font-size", "11px")
             .style("position", "relative");
 
-        _self.tweetContentDiv = d3.select('#'+divID).append("div")
-            .attr("id", "content"+divID)
+        _self.tweetContentDiv = d3.select('#' + divID).append("div")
+            .attr("id", "content" + divID)
             .style("background-color", "white")
-            .style("height", ($('#'+divID).height() - progressHeight - 2) + "px")
+            .style("height", ($('#' + divID).height() - progressHeight - 2) + "px")
             .style("width", "100%")
             .style("display", "inline-block")
             .style("overflow", "hidden")
             .style("position", "relative");
 
-        return "content"+divID;
+        return "content" + divID;
     },
 
     addControlMinimize: function (divID, context, expandhandler) {
 
         var _self = context;
 
-        _self.miniControlDiv = d3.select('#'+divID).append("div")
-            .attr("id", "minicontrol"+divID)
+        _self.miniControlDiv = d3.select('#' + divID).append("div")
+            .attr("id", "minicontrol" + divID)
             .style("background-color", "transparent")
             .style("height", "30px")
             .style("display", "inline-block")
@@ -92,41 +92,65 @@ var Feedback = {
             .attr("class", "minicontrol")
             .style("background-image", 'url("/images/stop.png")');
 
+        _self.expanded = false;
+
         _self.miniControlDiv.append("div")
             .attr("id", "expand")
             .attr("class", "minicontrol")
             .style("background-image", 'url("/images/expand.png")')
-            .on("click", expandhandler);
+            .on("click", function () {
+
+                if (!_self.expanded) {
+                    $("#" + divID).animate({height: '+=200'});
+                    _self.expanded = true;
+
+                    Feedback.addControlMaximize(divID, _self);
+
+                } else {
+                    $("#" + divID).animate({height: '-=200'});
+                    _self.expanded = false;
+
+                    _self.maxControlDiv.style("display", "none");
+                }
+            });
 
     },
 
-    addControlMaximize: function (divID, context, expandhandler) {
+    addControlMaximize: function (divID, context) {
 
         var _self = context;
 
-        _self.maxControlDiv = d3.select('#'+divID).append("div")
-            .attr("id", "maxcontrol"+divID)
-            .style("background-color", "transparent")
-            .style("height", "200px")
-            .style("display", "inline-block");
+        if (d3.select('#' + divID).select("#maxcontrol" + divID).empty()) {
 
-        _self.maxControlDiv = d3.select('#'+divID).append("div")
-            .attr("id", "maxcontrol"+divID)
-            .style("background-color", "transparent")
-            .style("height", "200px")
-            .style("display", "inline-block");
+            _self.maxControlDiv = d3.select('#' + divID).append("div")
+                .attr("id", "maxcontrol" + divID)
+                .style("background-color", "transparent")
+                .style("width", "100%")
+                .style("height", "200px")
+                .style("display", "inline-block");
 
-        _self.maxControlDiv = d3.select('#'+divID).append("div")
-            .attr("id", "maxcontrol"+divID)
-            .style("background-color", "transparent")
-            .style("height", "200px")
-            .style("display", "inline-block");
+            _self.measureControlDiv = _self.maxControlDiv.append("div")
+                .attr("id", "measurecontrol" + divID)
+                .style("background-color", "lightblue")
+                .style("width", "50%")
+                .style("height", "200px")
+                .style("display", "inline-block");
 
+            _self.optionsControlDiv = _self.maxControlDiv.append("div")
+                .attr("id", "optionscontrol" + divID)
+                .style("background-color", "pink")
+                .style("width", "50%")
+                .style("height", "200px")
+                .style("display", "inline-block");
 
+        } else {
+
+            _self.maxControlDiv.style("display", "inline-block");
+        }
     }
 }
 
-function getFontSize (element, width) {
-    return 11+"px";
+function getFontSize(element, width) {
+    return 11 + "px";
     return Math.min(width, (width - 8) / element.getComputedTextLength() * 24) + "px";
 }

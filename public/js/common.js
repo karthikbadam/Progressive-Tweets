@@ -116,7 +116,7 @@ var Feedback = {
 
     },
 
-    addControlMaximize: function (divID, context) {
+    addControlMaximize: function (divID, context, measures, options) {
 
         var _self = context;
 
@@ -146,7 +146,27 @@ var Feedback = {
         } else {
 
             _self.maxControlDiv.style("display", "inline-block");
+
         }
+
+
+        //Add sliders for measures array -- each measure definition has a range and a default value
+        measures.forEach(function (measure) {
+
+            // for each measure create a slider
+
+
+        });
+
+        //Add dropdowns for each option menus array -- each option definition has a list of options and a default
+        options.forEach(function (option) {
+
+            //for each options menu create a dropdown
+            
+        });
+
+
+
     }
 }
 

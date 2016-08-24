@@ -97,12 +97,12 @@ body {
 .brush .selection{
     fill-opacity: 0.5;
     fill: #FFF;
-    stroke: #666;
+    stroke: transparent;
 }
 
 .minicontrol {
-    width: 30px;
-    height: 30px;
+    width: 20px;
+    height: 20px;
     background-size: contain;
     display: inline-block;
     margin-right: 10px;

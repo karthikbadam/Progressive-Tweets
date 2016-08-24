@@ -57,13 +57,15 @@ var Feedback = {
 
         var _self = context;
 
+        var progressHeight = 20;
+
         _self.miniControlDiv = d3.select('#' + divID).append("div")
             .attr("id", "minicontrol" + divID)
             .style("background-color", "transparent")
-            .style("height", "30px")
+            .style("height", progressHeight + "px")
             .style("display", "inline-block")
             .style("position", "absolute")
-            .style("bottom", "1%")
+            .style("top", "1%")
             .style("right", "0")
             .style("margin", "5px");
 

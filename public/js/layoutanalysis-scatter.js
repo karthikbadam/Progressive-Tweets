@@ -65,12 +65,20 @@ function Scatter(options) {
                         if (d["content"][0] >= xdomain[0] && d["content"][0] <= xdomain[1]) {
                             if (d["content"][1] >= ydomain[0] && d["content"][1] <= ydomain[1]) {
                                 ids.push(+d["id"]);
+                                _self.svg.select("#l" + d["id"]).attr("r", 6);
                                 return true;
+                            } else {
+                                _self.svg.select("#l" + d["id"]).attr("r", 3);
+                                return false;
                             }
+                        } else {
+                            _self.svg.select("#l" + d["id"]).attr("r", 3);
+                            return false;
                         }
-                        return false;
                     });
+
                     console.log(ids);
+
 
                     //sending ids to the server
                     socket.send(wrapMessage("request keywords", {content: ids, chunkSize: 30}));
@@ -109,7 +117,7 @@ Scatter.prototype.draw = function (data) {
     }));
 
     // draw dots
-    var circles = _self.svg.selectAll(".dot")
+    var circles = _self.circles = _self.svg.selectAll(".dot")
         .data(_self.data, function (d, i) {
             return d["id"];
         });
@@ -122,7 +130,7 @@ Scatter.prototype.draw = function (data) {
             return "l" + d["id"];
         })
         .attr("class", "dot")
-        .attr("r", 3.5)
+        .attr("r", 3)
         .attr("cx", function (d) {
             return _self.x(d["content"][0]);
         })
@@ -230,7 +238,7 @@ function KeywordBar(parentDiv, data, rectWidth, rectHeight) {
     var svg = _self.svg = d3.select("#" + parentDiv).append("svg")
         .attr("width", width + margin.left + margin.right)
         .attr("height", height + margin.top + margin.bottom)
-        .style("background-color", "rgba(255, 255, 255, 0.8)")
+        .style("background-color", "transparent")
         .style("pointer-events", "none")
         .append("g")
         .attr("transform", "translate(" + margin.left + "," + margin.top + ")");
@@ -289,7 +297,6 @@ function KeywordBar(parentDiv, data, rectWidth, rectHeight) {
         .style("fill-opacity", 0.8);
 
     selection.exit().transition().duration(10).remove();
-
 
     var annotation = _self.svg.selectAll(".annotation")
         .data(data);

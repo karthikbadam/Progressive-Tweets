@@ -11,7 +11,56 @@ function HorizontalBar(options) {
 
     var contentDiv = Feedback.addProgressBar(parentDiv, _self);
 
-    Feedback.addControlMinimize(parentDiv, _self);
+    var optionHandlers = _self.optionHandlers = {};
+
+    _self.stopFlag = false;
+    _self.pauseFlag = false;
+
+    optionHandlers["stop"] = function () {
+
+        if (_self.stopFlag == false) {
+
+            _self.stopFlag = true;
+
+        } else {
+
+            _self.stopFlag = false;
+
+        }
+
+    }
+
+    optionHandlers["pause"] = function () {
+
+        if (_self.pauseFlag == false) {
+
+            _self.pauseFlag = true;
+
+        } else {
+
+            _self.pauseFlag = false;
+
+        }
+
+    }
+
+    optionHandlers["play"] = function () {
+
+        _self.pauseFlag = false;
+        _self.stopFlag = false;
+
+    }
+
+    optionHandlers["rewind"] = function () {
+
+    }
+
+    optionHandlers["forward"] = function () {
+
+    }
+
+
+    Feedback.addControlMinimize(parentDiv, _self, optionHandlers);
 
 
     var margin = {
@@ -72,74 +121,74 @@ HorizontalBar.prototype.draw = function (data, progress) {
 
     var _self = this;
 
-    _self.progressCurrentDiv.style("width", Math.round(progress["current"]*100/progress["total"])+"%")
-    _self.progressTotalDiv.style("width", 100 - Math.round(progress["current"]*100/progress["total"])+"%")
-    _self.progressCurrentDiv.select("span").text(Math.round(progress["current"]));
-    _self.progressTotalDiv.select("span").text(Math.round(progress["total"]));
+    if (!_self.pauseFlag) {
 
-    _self.y.domain(data.map(function (d) {
-        return d.key;
-    }).reverse());
+        Feedback.updateProgressBar(_self, progress);
 
-    var max = d3.max(data, function (d) {
-        return d.value;
-    });
+        _self.y.domain(data.map(function (d) {
+            return d.key;
+        }).reverse());
 
-    if (max >= _self.highest) {
-        _self.highest = 2 * max;
+        var max = d3.max(data, function (d) {
+            return d.value;
+        });
 
+        if (max >= _self.highest) {
+            _self.highest = 2 * max;
+
+        }
+        _self.x.domain([0, _self.highest]);
+
+        _self.svg.select(".x.axis").call(_self.xAxis);
+        _self.svg.select(".y.axis").call(_self.yAxis);
+
+        var selection = _self.svg.selectAll(".bar")
+            .data(data);
+
+        selection.enter()
+            .append("rect")
+            .transition().duration(10)
+            .attr("class", "bar")
+            .attr("y", function (d, i) {
+
+                return _self.y(d.key);
+            })
+            .attr("height", _self.y.bandwidth())
+            .attr("x", function (d) {
+                return 0;
+            })
+            .attr("width", function (d) {
+                return _self.x(d.value);
+            })
+            .style("fill", function (d, i) {
+                return "#EEE";
+            })
+            .style("stroke", function (d, i) {
+                return "#222";
+            })
+            .style("fill-opacity", 1);
+
+        selection.transition().duration(10)
+            .attr("y", function (d, i) {
+                return _self.y(d.key);
+            })
+            .attr("height", _self.y.bandwidth())
+            .attr("x", function (d) {
+                return 0;
+            })
+            .attr("width", function (d) {
+                return _self.x(d.value);
+            })
+            .style("fill", function (d, i) {
+                return "#EEE";
+            })
+            .style("stroke", function (d, i) {
+                return "#222";
+            })
+            .style("fill-opacity", 1);
+
+        selection.exit().transition().duration(10).remove();
     }
-    _self.x.domain([0, _self.highest]);
-
-    _self.svg.select(".x.axis").call(_self.xAxis);
-    _self.svg.select(".y.axis").call(_self.yAxis);
-
-    var selection = _self.svg.selectAll(".bar")
-        .data(data);
-
-    selection.enter()
-        .append("rect")
-        .transition().duration(10)
-        .attr("class", "bar")
-        .attr("y", function (d, i) {
-
-            return _self.y(d.key);
-        })
-        .attr("height", _self.y.bandwidth())
-        .attr("x", function (d) {
-            return 0;
-        })
-        .attr("width", function (d) {
-            return _self.x(d.value);
-        })
-        .style("fill", function (d, i) {
-            return "#EEE";
-        })
-        .style("stroke", function (d, i) {
-            return "#222";
-        })
-        .style("fill-opacity", 1);
-
-    selection.transition().duration(10)
-        .attr("y", function (d, i) {
-            return _self.y(d.key);
-        })
-        .attr("height", _self.y.bandwidth())
-        .attr("x", function (d) {
-            return 0;
-        })
-        .attr("width", function (d) {
-            return _self.x(d.value);
-        })
-        .style("fill", function (d, i) {
-            return "#EEE";
-        })
-        .style("stroke", function (d, i) {
-            return "#222";
-        })
-        .style("fill-opacity", 1);
-
-    selection.exit().transition().duration(10).remove();
 
 }
 

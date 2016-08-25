@@ -10,7 +10,56 @@ function Scatter(options) {
 
     var contentDiv = _self.contentDiv = Feedback.addProgressBar(parentDiv, _self);
 
-    Feedback.addControlMinimize(parentDiv, _self);
+    var optionHandlers = _self.optionHandlers = {};
+
+    _self.stopFlag = false;
+    _self.pauseFlag = false;
+
+    optionHandlers["stop"] = function () {
+
+        if (_self.stopFlag == false) {
+
+            _self.stopFlag = true;
+
+        } else {
+
+            _self.stopFlag = false;
+
+        }
+
+    }
+
+    optionHandlers["pause"] = function () {
+
+        if (_self.pauseFlag == false) {
+
+            _self.pauseFlag = true;
+
+        } else {
+
+            _self.pauseFlag = false;
+
+        }
+
+    }
+
+    optionHandlers["play"] = function () {
+
+        _self.pauseFlag = false;
+        _self.stopFlag = false;
+
+    }
+
+    optionHandlers["rewind"] = function () {
+
+    }
+
+    optionHandlers["forward"] = function () {
+
+    }
+
+
+    Feedback.addControlMinimize(parentDiv, _self, optionHandlers);
 
     var margin = _self.margin = {
             top: 5,
@@ -103,10 +152,7 @@ Scatter.prototype.draw = function (data) {
 
     var progress = data["absolute-progress"];
 
-    _self.progressCurrentDiv.style("width", Math.round(progress["current"] * 100 / progress["total"]) + "%")
-    _self.progressTotalDiv.style("width", 100 - Math.round(progress["current"] * 100 / progress["total"]) + "%")
-    _self.progressCurrentDiv.select("span").text(Math.round(progress["current"]));
-    _self.progressTotalDiv.select("span").text(Math.round(progress["total"]));
+    Feedback.updateProgressBar(_self, progress);
 
     _self.x.domain(d3.extent(_self.data, function (d) {
         return d["content"][0];
@@ -188,12 +234,11 @@ Scatter.prototype.drawKeywords = function (allKeywords) {
 
     console.log(_self.popularKeywords);
 
-
     d3.select("#keywordDiv").remove();
 
     _self.keywordDiv = d3.select('#' + _self.contentDiv).append("div")
         .attr("id", "keywordDiv")
-        .style("background-color", "transparent")
+        .style("background-color", "rgba(255, 255, 255, 0.6)")
         .style("height", _self.rectHeight + "px")
         .style("width", _self.rectWidth + "px")
         .style("display", "inline-block")

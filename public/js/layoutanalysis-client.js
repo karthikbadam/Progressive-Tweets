@@ -14,19 +14,13 @@ var emotionValues = new Array(emotions.length);
 
 var popularUsers = d3.map();
 
-var ratings = ["rating.1", "rating.2", "rating.3", "rating.4", "rating.5", "rating.6", "rating.7", "rating.8"];
-
 var colors = ["244,109,67", "166,217,106", "254,196,79", "77,77,77"];
-
-var tweets = [];
-
-var similarities = [];
 
 var sentiments = [];
 
 var handlers = {};
 
-var progressColor = "#9ecae1";
+var progressColor = "#c6dbef";
 
 function wrapMessage(event, message) {
     var to_send = {};

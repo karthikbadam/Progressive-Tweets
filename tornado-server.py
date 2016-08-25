@@ -23,6 +23,7 @@ import re, nltk, json
 from nltk import ngrams
 from nltk.stem.porter import PorterStemmer
 from nltk.corpus import stopwords
+from nltk.stem import WordNetLemmatizer
 import gensim
 from gensim import corpora, models
 import logging
@@ -43,9 +44,24 @@ distance = np.zeros([1, 1])
 
 ## -------------------------------------------------------------------
 stemmer = PorterStemmer()
+wordnetLemmatizer = WordNetLemmatizer()
 
 
-def jaccard(set_1, set_2):
+def jaccard(tweet1, tweet2):
+    ## lemmatize before finding jaccard distance
+    # for i in range(0, len(tweet1)):
+    #     print str(tweet1[i])
+    #     tweet1[i] = wordnetLemmatizer.lemmatize(tweet1[i])
+    #     tweet1[i] = stemmer.stem(tweet1[i])
+    #     print "After " + str(tweet1[i])
+    #
+    # for i in range(0, len(tweet2)):
+    #     tweet2[i] = wordnetLemmatizer.lemmatize(tweet2[i])
+    #     tweet2[i] = stemmer.stem(tweet2[i])
+
+    set_1 = set(tweet1)
+    set_2 = set(tweet2)
+
     return 1 - len(set_1.intersection(set_2)) / float(len(set_1.union(set_2)))
 
 
@@ -68,7 +84,7 @@ def tokenize(text):
 
 
 stopset = stopwords.words('english')
-freq_words = ['http', 'https', 'amp', 'com', 'co', 'th', 'tweetdebate', 'debate']
+freq_words = ['http', 'https', 'amp', 'com', 'co', 'th', 'tweetdebate', 'debate', 'mccain', 'obama']
 for i in freq_words:
     stopset.append(i)
 
@@ -84,18 +100,25 @@ def generateKeywords(tweet):
 
     currentDoc = []
     for word in range(len(temp)):
-        if temp[word][0] not in stopset and temp[word][1] in ["NN", "NNP", "NNS", "NNPS", "VBD", "VB", "VBG", "VBN",
-                                                              "VBP", "VBZ"]:
-            currentDoc.append(temp[word][0].lower())
+        if temp[word][0].lower() not in stopset and temp[word][1] in ["NN", "NNP", "NNS", "NNPS", "VBD", "VB", "VBG",
+                                                                      "VBN",
+                                                                      "VBP", "VBZ"]:
+            currentDoc.append(wordnetLemmatizer.lemmatize(temp[word][0].lower()))
 
     # bigrams = ngrams(nltk.word_tokenize(tweet.lower().strip()), 2)
     bigrams = list(ngrams(currentDoc, 2))
 
     newDoc = []
-
     for bigram in bigrams:
         newDoc.append(bigram[0] + " " + bigram[1])
         currentDoc.append(bigram[0] + " " + bigram[1])
+
+    # bigrams = ngrams(nltk.word_tokenize(tweet.lower().strip()), 2)
+    trigrams = list(ngrams(currentDoc, 3))
+
+    for trigram in trigrams:
+        newDoc.append(trigram[0] + " " + trigram[1] + " " + trigram[2])
+        currentDoc.append(trigram[0] + " " + trigram[1] + " " + trigram[2])
 
     return currentDoc
     # return newDoc
@@ -128,11 +151,6 @@ def analyzeTopic():
     # send('topics information', topics)
 
 
-def analyzeTSNE(X):
-    model = TSNE(n_components=2, init='pca', random_state=1, method='barnes_hut', n_iter=300, verbose=2)
-    return model.fit_transform(X)
-
-
 ## Currently for csv files or tsv files
 @gen.coroutine
 def readFileProgressive(data, client):
@@ -145,12 +163,11 @@ def readFileProgressive(data, client):
     colnames = ""
     chunkCounter = 0
 
-    statinfo = os.stat("public/data/" + filename)
-    totalSize = statinfo.st_size
     totalSize = os.path.getsize("public/data/" + filename)
     bytesRead = 0.0
 
     lineNumber = 1.0
+    chunkBytes = 0.0
 
     with open("public/data/" + filename, 'r') as infile:
         for line in infile:
@@ -163,7 +180,9 @@ def readFileProgressive(data, client):
 
                 bytesRead = bytesRead + len(line)
                 linesRead = lineNumber
-                totalLines = (linesRead / bytesRead) * totalSize
+                totalLines = int(round((linesRead / bytesRead) * totalSize))
+                chunkBytes = chunkBytes + len(line)
+
 
                 values = line.strip().split("\t")
                 for i, value in enumerate(values):
@@ -191,7 +210,8 @@ def readFileProgressive(data, client):
                     message["content"] = cache
                     message["absolute-progress"] = {
                         "current": linesRead,
-                        "total": totalLines
+                        "total": totalLines,
+                        "relative": chunkBytes
                     }
 
                     if renderStop == True:
@@ -201,19 +221,15 @@ def readFileProgressive(data, client):
 
                     cache = []
                     counter = 1
+                    chunkBytes = 0
 
                 time.sleep(0.04)
 
                 lineNumber = lineNumber + 1
 
+    totalLines = linesRead
 
-## Progressive t-SNE for layout generation
-# def appendTweets (data):
-#     global tweets
-#     tweet = data["content"]
-#     if tweet not in tweets:
-#         tweets.append(tweet)
-#     return data["chunkSize"], tweets[:]
+
 
 def sliceTweets(data):
     global contentCache
@@ -237,14 +253,20 @@ def layoutGenerationProgressive(data, client):
         distance.resize(size, size)
 
         for i, cTweet in enumerate(tweetsCopy):
-            distance[size - 1][i] = jaccard(set(cTweet["keywords"]), set(current["keywords"]))
-            distance[i][size - 1] = jaccard(set(cTweet["keywords"]), set(current["keywords"]))
+            # distance[size - 1][i] = jaccard(set(cTweet["keywords"]), set(current["keywords"]))
+            # distance[i][size - 1] = jaccard(set(cTweet["keywords"]), set(current["keywords"]))
+            distance[size - 1][i] = jaccard(cTweet["keywords"], current["keywords"])
+            distance[i][size - 1] = jaccard(cTweet["keywords"], current["keywords"])
 
         distance[size - 1][size - 1] = 0
 
     layoutPacketCounter = size
 
-    if layoutPacketCounter % chunkSize == 0 and layoutPacketCounter >= chunkSize:
+    print "total lines is ----------------------------------------------------------- " + str(
+        layoutPacketCounter) + " -- " + str(totalLines)
+
+    if (layoutPacketCounter % chunkSize == 0 and layoutPacketCounter >= chunkSize) \
+            or layoutPacketCounter == totalLines - 1:
         # tfidf = TfidfVectorizer().fit_transform(tweetsCopy)
         # similarities = linear_kernel(tfidf, tfidf)
 
@@ -253,6 +275,7 @@ def layoutGenerationProgressive(data, client):
         spatialLayout = spatialData.tolist()
 
         layouts = []
+
         for i, l in enumerate(spatialLayout):
             datum = {}
             datum["id"] = i
@@ -263,7 +286,8 @@ def layoutGenerationProgressive(data, client):
         returnData["content"] = layouts
         returnData["absolute-progress"] = {
             "current": layoutPacketCounter,
-            "total": totalLines
+            "total": totalLines,
+            "relative": layoutPacketCounter
         }
 
         client.send_message('spatial content', returnData)
@@ -310,7 +334,6 @@ def unWrapMessage(message):
 
 
 def keywordDistribution(message):
-    print "I AM HERE 2!----------------------------------------------------------!!!" + str(message)
     ids = message["content"]
 
 
@@ -321,12 +344,10 @@ def handleEvent(client, event, message):
         future = thread_pool.submit(readFileProgressive, message, client)
 
     if event == "request layout":
-        # message["keywords"] = tokenizeTweets(message)
         future = thread_pool.submit(layoutGenerationProgressive, message, client)
 
     if event == "request tweets":
-        # message["keywords"] = tokenizeTweets(message)
-            future = thread_pool.submit(layoutGenerationProgressive, message, client)
+        future = thread_pool.submit(layoutGenerationProgressive, message, client)
 
     if event == "request keywords":
         ids = message["content"]
@@ -339,7 +360,8 @@ def handleEvent(client, event, message):
         message["content"] = returnKeywords
         message["absolute-progress"] = {
             "current": 100,
-            "total": 100
+            "total": 100,
+            "relative": len(returnKeywords)
         }
         client.send_message("keyword content", message)
 
@@ -352,15 +374,6 @@ class SocketHandler(tornado.websocket.WebSocketHandler):
     @gen.coroutine
     def initialize(self):
         logger.info("Connection initiated")
-        # self.redis = tornadis.Client()
-        # loop = tornado.ioloop.IOLoop.current()
-        # loop.add_callback(self.watch_redis)
-
-    # @gen.coroutine
-    # def watch_redis(self):
-    #     while True:
-    #         response = yield self.redis.call('BLPOP', 'ws-queue', 0)
-    #         self.write_message(response[1])
 
     def on_message(self, message):
         event, message = unWrapMessage(message)

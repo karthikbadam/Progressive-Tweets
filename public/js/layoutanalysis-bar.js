@@ -10,7 +10,56 @@ function Bar(options) {
 
     var contentDiv = Feedback.addProgressBar(parentDiv, _self);
 
-    Feedback.addControlMinimize(parentDiv, _self);
+    var optionHandlers = _self.optionHandlers = {};
+
+    _self.stopFlag = false;
+    _self.pauseFlag = false;
+
+    optionHandlers["stop"] = function () {
+
+        if (_self.stopFlag == false) {
+
+            _self.stopFlag = true;
+
+        } else {
+
+            _self.stopFlag = false;
+
+        }
+
+    }
+
+    optionHandlers["pause"] = function () {
+
+        if (_self.pauseFlag == false) {
+
+            _self.pauseFlag = true;
+
+        } else {
+
+            _self.pauseFlag = false;
+
+        }
+
+    }
+
+    optionHandlers["play"] = function () {
+
+        _self.pauseFlag = false;
+        _self.stopFlag = false;
+
+    }
+
+    optionHandlers["rewind"] = function () {
+
+    }
+
+    optionHandlers["forward"] = function () {
+
+    }
+
+
+    Feedback.addControlMinimize(parentDiv, _self, optionHandlers);
 
     var margin = {
             top: 5,
@@ -18,8 +67,8 @@ function Bar(options) {
             bottom: 40,
             left: 40
         },
-        width = $("#"+contentDiv).width() - margin.left - margin.right,
-        height = $("#"+contentDiv).height() - margin.top - margin.bottom;
+        width = $("#" + contentDiv).width() - margin.left - margin.right,
+        height = $("#" + contentDiv).height() - margin.top - margin.bottom;
 
     _self.width = width;
     _self.height = height;
@@ -37,7 +86,7 @@ function Bar(options) {
     var yAxis = d3.axisLeft(y)
         .ticks(10);
 
-    var svg = _self.svg = d3.select("#"+contentDiv).append("svg")
+    var svg = _self.svg = d3.select("#" + contentDiv).append("svg")
         .attr("width", width + margin.left + margin.right)
         .attr("height", height + margin.top + margin.bottom)
         .append("g")
@@ -107,43 +156,43 @@ Bar.prototype.draw = function (data, progress) {
 
     var _self = this;
 
-    _self.progressCurrentDiv.style("width", Math.round(progress["current"]*100/progress["total"])+"%")
-    _self.progressTotalDiv.style("width", 100 - Math.round(progress["current"]*100/progress["total"])+"%")
-    _self.progressCurrentDiv.select("span").text(Math.round(progress["current"]));
-    _self.progressTotalDiv.select("span").text(Math.round(progress["total"]));
+    if (!_self.pauseFlag) {
 
-    var barSelection = _self.svg.selectAll(".bar")
-        .data(data);
+        Feedback.updateProgressBar(_self, progress);
 
-    barSelection
-        .transition().duration(10)
-        .attr("x", function (d, i) {
-            return _self.x(emotions[i]);
-        })
-        .attr("width", _self.x.bandwidth())
-        .attr("y", function (d) {
-            return _self.y(d);
-        })
-        .attr("height", function (d) {
-            return _self.height - _self.y(d);
-        })
-        .style("fill", function (d, i) {
-            return "rgb(" + colors[i] + ")";
-        })
-        .style("stroke", function (d, i) {
-            return "#222";
-        })
-        .style("fill-opacity", 0.5);
+        var barSelection = _self.svg.selectAll(".bar")
+            .data(data);
 
-    data.forEach(function (d, i) {
-        _self.svg.append("line")
-            .attr("class", "cap")
-            .attr("x1", _self.x(emotions[i]))
-            .attr("x2", _self.x(emotions[i]) - 5)
-            .attr("y1", _self.y(d))
-            .attr("y2", _self.y(d))
-            .attr("stroke-width", 1)
-            .attr("stroke", "#222")
-            .attr("stroke-opacity", 0.5);
-    });
+        barSelection
+            .transition().duration(10)
+            .attr("x", function (d, i) {
+                return _self.x(emotions[i]);
+            })
+            .attr("width", _self.x.bandwidth())
+            .attr("y", function (d) {
+                return _self.y(d);
+            })
+            .attr("height", function (d) {
+                return _self.height - _self.y(d);
+            })
+            .style("fill", function (d, i) {
+                return "rgb(" + colors[i] + ")";
+            })
+            .style("stroke", function (d, i) {
+                return "#222";
+            })
+            .style("fill-opacity", 0.5);
+
+        data.forEach(function (d, i) {
+            _self.svg.append("line")
+                .attr("class", "cap")
+                .attr("x1", _self.x(emotions[i]))
+                .attr("x2", _self.x(emotions[i]) - 5)
+                .attr("y1", _self.y(d))
+                .attr("y2", _self.y(d))
+                .attr("stroke-width", 1)
+                .attr("stroke", "#222")
+                .attr("stroke-opacity", 0.5);
+        });
+    }
 }

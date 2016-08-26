@@ -38,6 +38,9 @@ layoutStop = False
 contentCache = []
 totalLines = 1
 
+bin2DRows = 20
+bin2DCols = 20
+
 # thread_pool = ProcessPoolExecutor(100)
 thread_pool = ThreadPoolExecutor(200)
 distance = np.zeros([1, 1])
@@ -276,20 +279,38 @@ def layoutGenerationProgressive(data, client):
 
         layouts = []
 
+        # group points into bins to create a heatmap
+        # each has 1/100 size of the total width or height
+        # 20 rows and 20 columns
+        matrix = []
+        for i in range (0, bin2DRows):
+            matrixRow = []
+            for j in range(0, bin2DCols):
+                element = {}
+                element["density"] = 0
+                #element["points"] = []
+                matrixRow.append(element)
+            matrix.append(matrixRow)
+
         for i, l in enumerate(spatialLayout):
-            datum = {}
-            datum["id"] = i
-            datum["content"] = l
-            layouts.append(datum)
+            col = min(math.floor(l[0] * bin2DCols), bin2DCols - 1)
+            row = min(math.floor(l[1] * bin2DRows), bin2DRows - 1)
+            #matrix[row][col]["points"].push(l)
+            matrix[row][col]["density"] = matrix[row][col]["density"] + 1
+            # datum = {}
+            # datum["id"] = i
+            # datum["content"] = l
+            # layouts.append(datum)
 
         returnData = {}
+        #returnData["content"] = matrix
         returnData["content"] = layouts
+
         returnData["absolute-progress"] = {
             "current": layoutPacketCounter,
             "total": totalLines,
             "relative": layoutPacketCounter
         }
-
         client.send_message('spatial content', returnData)
 
 

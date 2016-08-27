@@ -38,8 +38,8 @@ layoutStop = False
 contentCache = []
 totalLines = 1
 
-bin2DRows = 20
-bin2DCols = 20
+bin2DRows = 25
+bin2DCols = 25
 
 # thread_pool = ProcessPoolExecutor(100)
 thread_pool = ThreadPoolExecutor(200)
@@ -61,7 +61,6 @@ def jaccard(tweet1, tweet2):
     # for i in range(0, len(tweet2)):
     #     tweet2[i] = wordnetLemmatizer.lemmatize(tweet2[i])
     #     tweet2[i] = stemmer.stem(tweet2[i])
-
     set_1 = set(tweet1)
     set_2 = set(tweet2)
 
@@ -309,7 +308,6 @@ def layoutGenerationProgressive(data, client):
         for i, l in enumerate(spatialLayout):
             col = int(min(math.floor((l[0] - xMin)/(xMax - xMin) * bin2DCols), bin2DCols - 1))
             row = int(min(math.floor((l[1] - yMin)/(yMax - yMin) * bin2DRows), bin2DRows - 1))
-            print str(col) + " " + str(row)
             matrix[row][col]["density"] = matrix[row][col]["density"] + 1
             matrix[row][col]["points"].append(l)
             # datum = {}
@@ -320,11 +318,12 @@ def layoutGenerationProgressive(data, client):
         # flatten the layout matrix
         for i in range(0, bin2DRows):
             for j in range(0, bin2DCols):
-                datum = {}
-                datum["row"] = i
-                datum["col"] = j
-                datum["content"] = matrix[i][j]["density"]
-                layouts.append(datum)
+                if matrix[i][j]["density"] != 0:
+                    datum = {}
+                    datum["row"] = i
+                    datum["col"] = j
+                    datum["content"] = matrix[i][j]["density"]
+                    layouts.append(datum)
 
         returnData = {}
         returnData["content"] = layouts
@@ -396,8 +395,11 @@ def handleEvent(client, event, message):
     if event == "request keywords":
         ids = message["content"]
         returnKeywords = []
+
+        ## ids has row and col
         for index in ids:
             returnKeywords.extend(contentCache[index]["keywords"])
+
 
         message = {}
         message["id"] = 1

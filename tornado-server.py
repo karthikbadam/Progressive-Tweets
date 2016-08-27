@@ -186,7 +186,6 @@ def readFileProgressive(data, client):
                 totalLines = int(round((linesRead / bytesRead) * totalSize))
                 chunkBytes = chunkBytes + len(line)
 
-
                 values = line.strip().split("\t")
                 for i, value in enumerate(values):
                     tweetDatum[colnames[i]] = unicode(value, errors='ignore')
@@ -231,7 +230,6 @@ def readFileProgressive(data, client):
                 lineNumber = lineNumber + 1
 
     totalLines = linesRead
-
 
 
 def sliceTweets(data):
@@ -283,27 +281,52 @@ def layoutGenerationProgressive(data, client):
         # each has 1/100 size of the total width or height
         # 20 rows and 20 columns
         matrix = []
-        for i in range (0, bin2DRows):
+        for i in range(0, bin2DRows):
             matrixRow = []
             for j in range(0, bin2DCols):
                 element = {}
                 element["density"] = 0
-                #element["points"] = []
+                element["points"] = []
                 matrixRow.append(element)
             matrix.append(matrixRow)
 
+        xMin = 100000000
+        xMax = -10000000
+        yMin = 100000000
+        yMax = -10000000
+
         for i, l in enumerate(spatialLayout):
-            col = min(math.floor(l[0] * bin2DCols), bin2DCols - 1)
-            row = min(math.floor(l[1] * bin2DRows), bin2DRows - 1)
-            #matrix[row][col]["points"].push(l)
+            if l[0] > xMax:
+                xMax = l[0]
+            if l[0] < xMin:
+                xMin = l[0]
+            if l[1] > yMax:
+                yMax = l[1]
+            if l[1] < yMin:
+                yMin = l[1]
+
+        # construct the layout matrix?
+        for i, l in enumerate(spatialLayout):
+            col = int(min(math.floor((l[0] - xMin)/(xMax - xMin) * bin2DCols), bin2DCols - 1))
+            row = int(min(math.floor((l[1] - yMin)/(yMax - yMin) * bin2DRows), bin2DRows - 1))
+            print str(col) + " " + str(row)
             matrix[row][col]["density"] = matrix[row][col]["density"] + 1
+            matrix[row][col]["points"].append(l)
             # datum = {}
             # datum["id"] = i
             # datum["content"] = l
             # layouts.append(datum)
 
+        # flatten the layout matrix
+        for i in range(0, bin2DRows):
+            for j in range(0, bin2DCols):
+                datum = {}
+                datum["row"] = i
+                datum["col"] = j
+                datum["content"] = matrix[i][j]["density"]
+                layouts.append(datum)
+
         returnData = {}
-        #returnData["content"] = matrix
         returnData["content"] = layouts
 
         returnData["absolute-progress"] = {

@@ -79,13 +79,19 @@ function Heatmap(options) {
         .append("g")
         .attr("transform", "translate(" + margin.left + "," + margin.top + ")");
 
-    var x = _self.x = d3.scaleLinear()
-        .range([0, width]);
-
-    var y = _self.y = d3.scaleLinear()
-        .range([height, 0]);
+    // var x = _self.x = d3.scaleLinear()
+    //     .range([0, width]);
+    //
+    // var y = _self.y = d3.scaleLinear()
+    //     .range([height, 0]);
 
     _self.data = null;
+
+    _self.bin2DRows = 20;
+    _self.bin2DCols = 20;
+
+    _self.heatmapColorScale = d3.scaleLinear()
+        .range(["#fff7fb", "#045a8d"]);
 
     // _self.brush = d3.brush()
     //     .extent([[0, 0], [width, height]])
@@ -154,57 +160,107 @@ Heatmap.prototype.draw = function (data) {
 
     Feedback.updateProgressBar(_self, progress);
 
-    _self.x.domain(d3.extent(_self.data, function (d) {
-        return d["content"][0];
-    }));
+    _self.heatmapColorScale
+        .domain(d3.extent(_self.data, function (p) {
+            if (p["content"] != 0) {
+                return p["content"];
+            }
+        }));
 
-    _self.y.domain(d3.extent(_self.data, function (d) {
-        return d["content"][1];
-    }));
+    // draw rectangles
+    var rectangles = _self.rectangles = _self.svg
+        .selectAll(".block")
+        .data(_self.data);
 
-    // draw dots
-    var circles = _self.circles = _self.svg.selectAll(".dot")
-        .data(_self.data, function (d, i) {
-            return d["id"];
+    rectangles.enter()
+        .append("rect")
+        .attr("class", "block")
+        .attr("x", function (d, i) {
+            return d["col"] * (_self.width / _self.bin2DCols);
+        })
+        .attr("y", function (d, i) {
+            return d["row"] * (_self.height / _self.bin2DRows);
+        })
+        .attr("width", _self.width / _self.bin2DCols)
+        .attr("height", _self.height / _self.bin2DRows)
+        .attr("fill", function (d, i) {
+            if (d["content"] == 0) {
+                return "white";
+            }
+            return _self.heatmapColorScale(d["content"]);
+
+        })
+        .attr("stroke", "#fff")
+        .attr("cell", function (d) {
+            return "r" + d.row + "c" + d.col;
         });
 
-    circles.enter()
-        .append("circle")
-        .transition()
-        .duration(200)
-        .attr("id", function (d, i) {
-            return "l" + d["id"];
-        })
-        .attr("class", "dot")
-        .attr("r", 3)
-        .attr("cx", function (d) {
-            return _self.x(d["content"][0]);
-        })
-        .attr("cy", function (d) {
-            return _self.y(d["content"][1]);
-        })
-        .style("fill", function (d, i) {
-            if (isNaN(sentiments[i])) {
-                return "rgb(" + colors[sentiments[3]] + ")";
-            }
-            return "rgb(" + colors[sentiments[i]] + ")";
-        })
-        .style("stroke", function (d) {
-            return "#222";
-        })
-        .style("fill-opacity", 0.75);
-
-    circles.exit()
+    rectangles.exit()
         .remove();
 
-    circles
-        .transition(_self.t)
-        .attr("cx", function (d) {
-            return _self.x(d["content"][0]);
+    rectangles.transition(_self.t)
+        .attr("x", function (d, i) {
+            return d["col"] * (_self.width / _self.bin2DCols);
         })
-        .attr("cy", function (d) {
-            return _self.y(d["content"][1]);
+        .attr("y", function (d, i) {
+            return d["row"] * (_self.height / _self.bin2DRows);
+        })
+        .attr("width", _self.width / _self.bin2DCols)
+        .attr("height", _self.height / _self.bin2DRows)
+        .attr("fill", function (d, i) {
+            if (d["content"] == 0) {
+                return "white";
+            }
+            return _self.heatmapColorScale(d["content"]);
+        })
+        .attr("stroke", "#fff")
+        .attr("cell", function (d) {
+            return "r" + d.row + "c" + d.col;
         });
+
+    // draw dots
+    // var circles = _self.circles = _self.svg.selectAll(".dot")
+    //     .data(_self.data, function (d, i) {
+    //         return d["id"];
+    //     });
+    //
+    // circles.enter()
+    //     .append("circle")
+    //     .transition()
+    //     .duration(200)
+    //     .attr("id", function (d, i) {
+    //         return "l" + d["id"];
+    //     })
+    //     .attr("class", "dot")
+    //     .attr("r", 3)
+    //     .attr("cx", function (d) {
+    //         return _self.x(d["content"][0]);
+    //     })
+    //     .attr("cy", function (d) {
+    //         return _self.y(d["content"][1]);
+    //     })
+    //     .style("fill", function (d, i) {
+    //         if (isNaN(sentiments[i])) {
+    //             return "rgb(" + colors[sentiments[3]] + ")";
+    //         }
+    //         return "rgb(" + colors[sentiments[i]] + ")";
+    //     })
+    //     .style("stroke", function (d) {
+    //         return "#222";
+    //     })
+    //     .style("fill-opacity", 0.75);
+    //
+    // circles.exit()
+    //     .remove();
+    //
+    // circles
+    //     .transition(_self.t)
+    //     .attr("cx", function (d) {
+    //         return _self.x(d["content"][0]);
+    //     })
+    //     .attr("cy", function (d) {
+    //         return _self.y(d["content"][1]);
+    //     });
 }
 
 Heatmap.prototype.drawKeywords = function (allKeywords) {

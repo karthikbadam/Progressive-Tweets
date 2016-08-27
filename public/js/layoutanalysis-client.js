@@ -107,7 +107,7 @@ $(document).ready(function () {
 
         if (tweetScatter == null) {
 
-            tweetScatter = new Scatter({});
+            tweetScatter = new Heatmap({});
 
         }
 

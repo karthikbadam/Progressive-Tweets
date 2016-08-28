@@ -36,6 +36,7 @@ logger = logging.getLogger(__name__)
 renderStop = False
 layoutStop = False
 contentCache = []
+layoutCache = []
 totalLines = 1
 
 bin2DRows = 25
@@ -116,11 +117,11 @@ def generateKeywords(tweet):
         currentDoc.append(bigram[0] + " " + bigram[1])
 
     # bigrams = ngrams(nltk.word_tokenize(tweet.lower().strip()), 2)
-    trigrams = list(ngrams(currentDoc, 3))
-
-    for trigram in trigrams:
-        newDoc.append(trigram[0] + " " + trigram[1] + " " + trigram[2])
-        currentDoc.append(trigram[0] + " " + trigram[1] + " " + trigram[2])
+    # trigrams = list(ngrams(currentDoc, 3))
+    #
+    # for trigram in trigrams:
+    #     newDoc.append(trigram[0] + " " + trigram[1] + " " + trigram[2])
+    #     currentDoc.append(trigram[0] + " " + trigram[1] + " " + trigram[2])
 
     return currentDoc
     # return newDoc
@@ -243,6 +244,7 @@ def tokenizeTweets(data):
 
 def layoutGenerationProgressive(data, client):
     global distance
+    global layoutCache
 
     chunkSize, tweetsCopy, current = sliceTweets(data)
     size = data["content"] + 1
@@ -262,8 +264,8 @@ def layoutGenerationProgressive(data, client):
 
     layoutPacketCounter = size
 
-    print "total lines is ----------------------------------------------------------- " + str(
-        layoutPacketCounter) + " -- " + str(totalLines)
+    # print "total lines is ----------------------------------------------------------- " + str(
+    #    layoutPacketCounter) + " -- " + str(totalLines)
 
     if (layoutPacketCounter % chunkSize == 0 and layoutPacketCounter >= chunkSize) \
             or layoutPacketCounter == totalLines - 1:
@@ -306,10 +308,13 @@ def layoutGenerationProgressive(data, client):
 
         # construct the layout matrix?
         for i, l in enumerate(spatialLayout):
-            col = int(min(math.floor((l[0] - xMin)/(xMax - xMin) * bin2DCols), bin2DCols - 1))
-            row = int(min(math.floor((l[1] - yMin)/(yMax - yMin) * bin2DRows), bin2DRows - 1))
+            col = int(min(math.floor((l[0] - xMin) / (xMax - xMin) * bin2DCols), bin2DCols - 1))
+            row = int(min(math.floor((l[1] - yMin) / (yMax - yMin) * bin2DRows), bin2DRows - 1))
             matrix[row][col]["density"] = matrix[row][col]["density"] + 1
-            matrix[row][col]["points"].append(l)
+            matrix[row][col]["points"].append({
+                "id": i,
+                "content": l
+            })
             # datum = {}
             # datum["id"] = i
             # datum["content"] = l
@@ -327,6 +332,8 @@ def layoutGenerationProgressive(data, client):
 
         returnData = {}
         returnData["content"] = layouts
+
+        layoutCache = matrix
 
         returnData["absolute-progress"] = {
             "current": layoutPacketCounter,
@@ -396,10 +403,13 @@ def handleEvent(client, event, message):
         ids = message["content"]
         returnKeywords = []
 
-        ## ids has row and col
-        for index in ids:
-            returnKeywords.extend(contentCache[index]["keywords"])
+        for points in layoutCache[ids["row"]][ids["col"]]["points"]:
+            print str(ids)
+            returnKeywords.extend(contentCache[points["id"]]["keywords"])
 
+        ## ids has row and col
+        # for index in ids:
+        #     returnKeywords.extend(contentCache[index]["keywords"])
 
         message = {}
         message["id"] = 1

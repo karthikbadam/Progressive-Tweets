@@ -193,6 +193,31 @@ Heatmap.prototype.draw = function (data) {
         .attr("stroke", "#fff")
         .attr("cell", function (d) {
             return "r" + d.row + "c" + d.col;
+        })
+        .style("cursor", "pointer")
+        .on("click", function (d, i) {
+            var datum = {
+                row: d["row"],
+                col: d["col"]
+            };
+
+            _self.svg.selectAll(".block")
+                .attr("fill", function (d, i) {
+                    if (d["content"] == 0) {
+                        return "white";
+                    }
+                    return _self.heatmapColorScale(d["content"]);
+                });
+
+            d3.select(this).attr("fill", "#a63603");
+
+            _self.rectWidth = 100;
+            _self.rectHeight = 150;
+
+            _self.rectLeft = d["col"] * (_self.width / _self.bin2DCols) + _self.rectWidth > _self.width ? d["col"] * (_self.width / _self.bin2DCols) - _self.rectWidth + _self.margin.left : d["col"] * (_self.width / _self.bin2DCols) + _self.margin.left;
+            _self.rectTop = d["row"] * (_self.height / _self.bin2DRows) + _self.rectHeight > _self.height ? d["row"] * (_self.height / _self.bin2DRows) - _self.rectHeight + _self.margin.top : d["row"] * (_self.height / _self.bin2DRows) + _self.margin.top;
+
+            socket.send(wrapMessage("request keywords", {content: datum, chunkSize: 30}));
         });
 
     rectangles.exit()
@@ -286,7 +311,7 @@ Heatmap.prototype.drawKeywords = function (allKeywords) {
 
     _self.popularKeywords = _self.popularKeywords.entries().sort(function (a, b) {
         return b.value - a.value;
-    }).slice(0, 15);
+    }).slice(0, 10);
 
     console.log(_self.popularKeywords);
 

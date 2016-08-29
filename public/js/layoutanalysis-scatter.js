@@ -64,7 +64,7 @@ function Scatter(options) {
     var margin = _self.margin = {
             top: 5,
             right: 5,
-            bottom: 40,
+            bottom: 10,
             left: 5
         },
         width = $("#" + contentDiv).width() - margin.left - margin.right,

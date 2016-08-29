@@ -64,7 +64,7 @@ function Heatmap(options) {
     var margin = _self.margin = {
             top: 5,
             right: 5,
-            bottom: 40,
+            bottom: 25,
             left: 5
         },
         width = $("#" + contentDiv).width() - margin.left - margin.right,
@@ -195,7 +195,18 @@ Heatmap.prototype.draw = function (data) {
             return "r" + d.row + "c" + d.col;
         })
         .style("cursor", "pointer")
-        .on("click", function (d, i) {
+        .on("mouseenter", function () {
+            console.log("mouseenter");
+            this.hoverStart = Date.now();
+        })
+        .on("mouseover", function (d, i) {
+            if (Date.now() - this.hoverStart < 1000) {
+                console.log("mouseover");
+                return;
+            } else {
+                hoverStart = Date.now();
+                console.log("mouseover2");
+            }
             var datum = {
                 row: d["row"],
                 col: d["col"]
@@ -218,7 +229,33 @@ Heatmap.prototype.draw = function (data) {
             _self.rectTop = d["row"] * (_self.height / _self.bin2DRows) + _self.rectHeight > _self.height ? d["row"] * (_self.height / _self.bin2DRows) - _self.rectHeight + _self.margin.top : d["row"] * (_self.height / _self.bin2DRows) + _self.margin.top;
 
             socket.send(wrapMessage("request keywords", {content: datum, chunkSize: 30}));
+        })
+        .on("click", function (d, i) {
+
+            var datum = {
+                row: d["row"],
+                col: d["col"]
+            };
+
+            _self.svg.selectAll(".block")
+                .attr("fill", function (d, i) {
+                    if (d["content"] == 0) {
+                        return "white";
+                    }
+                    return _self.heatmapColorScale(d["content"]);
+                });
+
+            d3.select(this).attr("fill", "#a63603");
+
+            _self.rectWidth = 100;
+            _self.rectHeight = 150;
+
+            _self.rectLeft = d["col"] * (_self.width / _self.bin2DCols) + _self.rectWidth > _self.width ? d["col"] * (_self.width / _self.bin2DCols) - _self.rectWidth + _self.margin.left : d["col"] * (_self.width / _self.bin2DCols) + _self.margin.left;
+            _self.rectTop = d["row"] * (_self.height / _self.bin2DRows) + _self.rectHeight > _self.height ? d["row"] * (_self.height / _self.bin2DRows) - _self.rectHeight + _self.margin.top : d["row"] * (_self.height / _self.bin2DRows) + _self.margin.top;
+
+            socket.send(wrapMessage("request tweets", {content: datum, chunkSize: 30}));
         });
+
 
     rectangles.exit()
         .remove();
@@ -243,49 +280,19 @@ Heatmap.prototype.draw = function (data) {
             return "r" + d.row + "c" + d.col;
         });
 
-    // draw dots
-    // var circles = _self.circles = _self.svg.selectAll(".dot")
-    //     .data(_self.data, function (d, i) {
-    //         return d["id"];
-    //     });
-    //
-    // circles.enter()
-    //     .append("circle")
-    //     .transition()
-    //     .duration(200)
-    //     .attr("id", function (d, i) {
-    //         return "l" + d["id"];
-    //     })
-    //     .attr("class", "dot")
-    //     .attr("r", 3)
-    //     .attr("cx", function (d) {
-    //         return _self.x(d["content"][0]);
-    //     })
-    //     .attr("cy", function (d) {
-    //         return _self.y(d["content"][1]);
-    //     })
-    //     .style("fill", function (d, i) {
-    //         if (isNaN(sentiments[i])) {
-    //             return "rgb(" + colors[sentiments[3]] + ")";
-    //         }
-    //         return "rgb(" + colors[sentiments[i]] + ")";
-    //     })
-    //     .style("stroke", function (d) {
-    //         return "#222";
-    //     })
-    //     .style("fill-opacity", 0.75);
-    //
-    // circles.exit()
-    //     .remove();
-    //
-    // circles
-    //     .transition(_self.t)
-    //     .attr("cx", function (d) {
-    //         return _self.x(d["content"][0]);
-    //     })
-    //     .attr("cy", function (d) {
-    //         return _self.y(d["content"][1]);
-    //     });
+    if (_self.svg.selectAll("#title").empty()) {
+        _self.svg.append("text")
+            .attr("id", "title")
+            .attr("x", _self.margin.left)
+            .attr("y", _self.height + _self.margin.top + 5)
+            .attr("font-size", "11px")
+            .attr("fill", function (d, i) {
+                return "#222";
+            })
+            .attr("stroke", "transparent")
+            .text("Tweets organized based on similarity in a heatmap");
+
+    }
 }
 
 Heatmap.prototype.drawKeywords = function (allKeywords) {

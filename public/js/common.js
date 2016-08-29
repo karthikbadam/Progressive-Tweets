@@ -178,7 +178,11 @@ var Feedback = {
         progressAnnotations.enter().append("text")
             .attr("class", "annotation")
             .attr("y", function (d, i) {
-                return _self.progressHeight / 2;
+                if (i == 0) {
+                    return _self.progressHeight / 2;
+                } else {
+                    return 3 * _self.progressHeight / 4;
+                }
             })
             .attr("x", function (d, i) {
                 if (i == 0) {
@@ -198,7 +202,11 @@ var Feedback = {
 
         progressAnnotations
             .attr("y", function (d, i) {
-                return _self.progressHeight / 2;
+                if (i == 0) {
+                    return _self.progressHeight / 2;
+                } else {
+                    return 3 * _self.progressHeight / 4;
+                }
             })
             .attr("x", function (d, i) {
                 if (i == 0) {

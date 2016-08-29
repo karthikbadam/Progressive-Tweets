@@ -122,6 +122,11 @@ $(document).ready(function () {
         tweetScatter.drawKeywords(cache["content"]);
     });
 
+    registerHandlers("tweets content", function (cache) {
+
+        console.log(cache);
+
+    });
 
     registerHandlers("file content", function (cache) {
 

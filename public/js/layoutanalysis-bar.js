@@ -64,7 +64,7 @@ function Bar(options) {
     var margin = {
             top: 5,
             right: 5,
-            bottom: 40,
+            bottom: 25,
             left: 40
         },
         width = $("#" + contentDiv).width() - margin.left - margin.right,

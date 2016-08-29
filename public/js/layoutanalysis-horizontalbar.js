@@ -66,7 +66,7 @@ function HorizontalBar(options) {
     var margin = {
             top: 5,
             right: 20,
-            bottom: 40,
+            bottom: 10,
             left: 110
         },
         width = $("#"+contentDiv).width() - margin.left - margin.right,

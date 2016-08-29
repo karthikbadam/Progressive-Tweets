@@ -194,12 +194,14 @@ def readFileProgressive(data, client):
                               "sentiment": tweetDatum["rating.1"],
                               "author": tweetDatum["author.name"],
                               "id": counter - 1})
+                tweetDatum["id"] = counter - 1
 
                 counter = counter + 1
 
                 ## maintain a cache of the data
                 ## Lets add keywords right here
                 tweetDatum["keywords"] = tokenizeTweets(tweetDatum)
+
 
                 if len(contentCache) < lineNumber:
                     contentCache.append(tweetDatum)
@@ -273,8 +275,15 @@ def layoutGenerationProgressive(data, client):
         # similarities = linear_kernel(tfidf, tfidf)
 
         model = TSNE(n_components=2, init='pca', random_state=1, method='barnes_hut', n_iter=200, verbose=2)
+
         spatialData = model.fit_transform(np.copy(distance))
         spatialLayout = spatialData.tolist()
+
+        # ## first time
+        # if layoutPacketCounter <= chunkSize:
+        #     spatialData = model.fit_transform(np.copy(distance))
+        #     spatialLayout = spatialData.tolist()
+        # else:
 
         layouts = []
 
@@ -315,6 +324,7 @@ def layoutGenerationProgressive(data, client):
                 "id": i,
                 "content": l
             })
+            contentCache[i]["location"] = l
             # datum = {}
             # datum["id"] = i
             # datum["content"] = l
@@ -397,7 +407,22 @@ def handleEvent(client, event, message):
         future = thread_pool.submit(layoutGenerationProgressive, message, client)
 
     if event == "request tweets":
-        future = thread_pool.submit(layoutGenerationProgressive, message, client)
+        ids = message["content"]
+        returnTweets = []
+
+        for points in layoutCache[ids["row"]][ids["col"]]["points"]:
+            print str(contentCache[points["id"]])
+            returnTweets.append(contentCache[points["id"]])
+
+        message = {}
+        message["id"] = 1
+        message["content"] = returnTweets
+        message["absolute-progress"] = {
+            "current": 100,
+            "total": 100,
+            "relative": len(returnTweets)
+        }
+        client.send_message("tweets content", message)
 
     if event == "request keywords":
         ids = message["content"]

@@ -87,8 +87,8 @@ function Heatmap(options) {
 
     _self.data = null;
 
-    _self.bin2DRows = 25;
-    _self.bin2DCols = 25;
+    _self.bin2DRows = 40;
+    _self.bin2DCols = 40;
 
     _self.heatmapColorScale = d3.scaleLinear()
         .range(["#fff7fb", "#045a8d"]);
@@ -148,6 +148,12 @@ function Heatmap(options) {
     _self.t = d3.transition()
         .duration(200)
         .ease(d3.easeLinear);
+}
+
+Heatmap.prototype.pause = function () {
+    var _self = this;
+
+    _self.pauseFlag = true;
 }
 
 Heatmap.prototype.draw = function (data) {

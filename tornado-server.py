@@ -39,8 +39,8 @@ contentCache = []
 layoutCache = []
 totalLines = 1
 
-bin2DRows = 25
-bin2DCols = 25
+bin2DRows = 40
+bin2DCols = 40
 
 # thread_pool = ProcessPoolExecutor(100)
 thread_pool = ThreadPoolExecutor(200)
@@ -411,7 +411,6 @@ def handleEvent(client, event, message):
         returnTweets = []
 
         for points in layoutCache[ids["row"]][ids["col"]]["points"]:
-            print str(contentCache[points["id"]])
             returnTweets.append(contentCache[points["id"]])
 
         message = {}
@@ -429,7 +428,6 @@ def handleEvent(client, event, message):
         returnKeywords = []
 
         for points in layoutCache[ids["row"]][ids["col"]]["points"]:
-            print str(ids)
             returnKeywords.extend(contentCache[points["id"]]["keywords"])
 
         ## ids has row and col

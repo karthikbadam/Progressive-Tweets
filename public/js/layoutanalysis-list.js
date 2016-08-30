@@ -48,6 +48,14 @@ function List(options) {
 
 }
 
+
+List.prototype.pause = function () {
+    var _self = this;
+
+    _self.pauseFlag = true;
+}
+
+
 List.prototype.requestData = function (cache) {
 
     var _self = this;
@@ -60,7 +68,6 @@ List.prototype.draw = function (cache) {
 
     var chunkId = cache["id"];
     var tweetChunk = cache["content"];
-
     var progress = cache["absolute-progress"];
 
     Feedback.updateProgressBar(_self, progress);
@@ -70,7 +77,9 @@ List.prototype.draw = function (cache) {
         tweetChunk.forEach(function (textData, i) {
 
             // Adding tweet to the list
-            var textId = ((cache.id - 1) * tweetChunk.length + i);
+            var textId = ((chunkId - 1) * tweetChunk.length + i);
+
+            socket.send(wrapMessage("request layout", {content: textId, chunkSize: 200}));
 
             _self.textContentDiv.append("div")
                 .attr("id", "list" + textId)

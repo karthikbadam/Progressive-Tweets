@@ -8,6 +8,19 @@ function Bar(options) {
 
     var parentDiv = _self.parentDiv = "sentimentDiv";
 
+    _self.emotions = options.emotions;
+
+    _self.emotionValues = new Array(options.emotions.length);
+
+    for (var i = 0; i < _self.emotions.length; i++) {
+        _self.emotionValues[i] = 0;
+    }
+
+
+    _self.selectedEmotions = null;
+
+    _self.highest = 10;
+
     var contentDiv = Feedback.addProgressBar(parentDiv, _self);
 
     var optionHandlers = _self.optionHandlers = {};
@@ -94,7 +107,7 @@ function Bar(options) {
 
     x.domain(options.emotions);
 
-    y.domain([0, 1500]);
+    y.domain([0, _self.highest]);
 
     svg.append("g")
         .attr("class", "x axis")
@@ -152,21 +165,111 @@ function Bar(options) {
 
 }
 
-Bar.prototype.draw = function (data, progress) {
+Bar.prototype.pause = function () {
+    var _self = this;
+
+    _self.pauseFlag = true;
+}
+
+
+Bar.prototype.highlight = function (cache) {
+    var _self = this;
+
+    var chunkId = cache["id"];
+    var progress = cache["absolute-progress"];
+    var tweetChunk = cache["content"];
+
+    _self.selectedEmotions = new Array(_self.emotions.length);
+
+    for (var i = 0; i < _self.emotions.length; i++) {
+        _self.selectedEmotions[i] = 0;
+    }
+
+    tweetChunk.forEach(function (tweetData, i) {
+
+        // Processing the rating
+        var ratingValue = +tweetData["sentiment"];
+
+        if (!isNaN(ratingValue) && ratingValue > 0) {
+            _self.selectedEmotions[ratingValue - 1]++;
+        }
+    });
+
+    console.log(_self.selectedEmotions);
+
+    var selectedEmotions = _self.selectedEmotions = _self.svg.selectAll(".selectedBar")
+        .data(_self.selectedEmotions);
+
+    _self.selectedEmotions
+        .enter()
+        .append("rect")
+        .attr("class", "selectedBar")
+        .transition().duration(10)
+        .attr("x", function (d, i) {
+            return _self.x(_self.emotions[i]);
+        })
+        .attr("width", _self.x.bandwidth())
+        .attr("y", function (d) {
+            return _self.y(d);
+        })
+        .attr("height", function (d) {
+            return _self.height - _self.y(d);
+        })
+        .style("fill", function (d, i) {
+            return "rgb(" + colors[i] + ")";
+        })
+        .style("stroke", function (d, i) {
+            return "#222";
+        })
+        .style("fill-opacity", 0.5);
+}
+
+Bar.prototype.draw = function (cache) {
 
     var _self = this;
 
+    var progress = cache["absolute-progress"];
+    var tweetChunk = cache["content"];
+
+    tweetChunk.forEach(function (tweetData, i) {
+
+        // Processing the rating
+        var ratingValue = +tweetData["sentiment"];
+
+        if (!isNaN(ratingValue) && ratingValue > 0) {
+            _self.emotionValues[ratingValue - 1]++;
+        }
+    });
+
+
     if (!_self.pauseFlag) {
 
-        Feedback.updateProgressBar(_self, progress);
+        if (progress) {
+            Feedback.updateProgressBar(_self, progress);
+        }
 
-        var barSelection = _self.svg.selectAll(".bar")
-            .data(data);
+        if (_self.selectedEmotions) {
+            _self.selectedEmotions.remove();
+        }
 
-        barSelection
-            .transition().duration(10)
+        var max = d3.max(_self.emotionValues, function (d) {
+            return d;
+        });
+
+        if (max >= _self.highest) {
+            _self.highest = 2 * max;
+
+        }
+        _self.y.domain([0, _self.highest]);
+
+        _self.svg.select(".y.axis").call(_self.yAxis);
+
+        var bars = _self.bars = _self.svg.selectAll(".bar")
+            .data(_self.emotionValues);
+
+        _self.bars.transition().duration(10)
             .attr("x", function (d, i) {
-                return _self.x(emotions[i]);
+                return _self.x(_self.emotions[i]);
             })
             .attr("width", _self.x.bandwidth())
             .attr("y", function (d) {
@@ -183,16 +286,16 @@ Bar.prototype.draw = function (data, progress) {
             })
             .style("fill-opacity", 0.5);
 
-        data.forEach(function (d, i) {
-            _self.svg.append("line")
-                .attr("class", "cap")
-                .attr("x1", _self.x(emotions[i]))
-                .attr("x2", _self.x(emotions[i]) - 5)
-                .attr("y1", _self.y(d))
-                .attr("y2", _self.y(d))
-                .attr("stroke-width", 1)
-                .attr("stroke", "#222")
-                .attr("stroke-opacity", 0.5);
-        });
+        // data.forEach(function (d, i) {
+        //     _self.svg.append("line")
+        //         .attr("class", "cap")
+        //         .attr("x1", _self.x(emotions[i]))
+        //         .attr("x2", _self.x(emotions[i]) - 5)
+        //         .attr("y1", _self.y(d))
+        //         .attr("y2", _self.y(d))
+        //         .attr("stroke-width", 1)
+        //         .attr("stroke", "#222")
+        //         .attr("stroke-opacity", 0.5);
+        // });
     }
 }

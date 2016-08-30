@@ -6,7 +6,7 @@ var socket;
 
 var dataFile = "twitter_debate.txt";
 
-var sentimentBar, userBar, tweetScatter, list = null;
+var sentimentBar, userBar, textScatter, list = null;
 
 var emotions = ["negative", "positive", "mixed", "other"];
 
@@ -63,11 +63,6 @@ $(document).ready(function () {
     // });
 
 
-    for (var i = 0; i < 4; i++) {
-        emotionValues[i] = 0;
-    }
-
-
     registerHandlers("topic content", function (cache) {
 
         // var cache = JSON.parse(cache);
@@ -105,13 +100,13 @@ $(document).ready(function () {
 
     registerHandlers("spatial content", function (cache) {
 
-        if (tweetScatter == null) {
+        if (textScatter == null) {
 
-            tweetScatter = new Heatmap({});
+            textScatter = new Heatmap({});
 
         }
 
-        tweetScatter.draw(cache);
+        textScatter.draw(cache);
 
     });
 
@@ -119,57 +114,36 @@ $(document).ready(function () {
 
         console.log(cache);
 
-        tweetScatter.drawKeywords(cache["content"]);
+        textScatter.drawKeywords(cache["content"]);
     });
 
     registerHandlers("tweets content", function (cache) {
 
         console.log(cache);
+        textScatter.pause();
+
+        // process users into an array
+        userBar.pause();
+        userBar.highlight(cache);
+
+        // process sentiments into an array
+        sentimentBar.pause();
+        sentimentBar.highlight(cache);
+
+        // process tweets into an array
+        list.pause();
+        list.draw(cache);
+
 
     });
 
     registerHandlers("file content", function (cache) {
 
-        var chunkId = cache["id"];
-        var progress = cache["absolute-progress"];
-        var tweetChunk = cache["content"];
-
         list.draw(cache);
 
-        tweetChunk.forEach(function (tweetData, i) {
+        sentimentBar.draw(cache);
 
-            // Adding tweet to the list
-            var tweetId = ((cache.id - 1) * tweetChunk.length + i);
-
-            socket.send(wrapMessage("request layout", {content: tweetId, chunkSize: 200}));
-
-            // Processing the rating
-            var ratingValue = +tweetData["sentiment"];
-            sentiments.push(ratingValue - 1);
-
-            if (!isNaN(ratingValue) && ratingValue > 0) {
-                emotionValues[ratingValue - 1]++;
-            }
-
-            // counting the tweets
-            if (popularUsers.has(tweetData["author"])) {
-
-                popularUsers.set(tweetData["author"], popularUsers.get(tweetData["author"]) + 1);
-
-            } else {
-
-                popularUsers.set(tweetData["author"], 1);
-            }
-
-        });
-
-        sentimentBar.draw(emotionValues, progress);
-
-        users = popularUsers.entries().sort(function (a, b) {
-            return b.value - a.value;
-        }).slice(0, 15);
-
-        userBar.draw(users, progress);
+        userBar.draw(cache);
 
     });
 

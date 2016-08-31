@@ -91,7 +91,7 @@ function Heatmap(options) {
     _self.bin2DCols = 40;
 
     _self.heatmapColorScale = d3.scaleLinear()
-        .range(["#fff7fb", "#045a8d"]);
+        .range(["#deebf7", "#045a8d"]);
 
     // _self.brush = d3.brush()
     //     .extent([[0, 0], [width, height]])

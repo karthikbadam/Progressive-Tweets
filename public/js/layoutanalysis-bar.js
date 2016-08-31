@@ -75,7 +75,7 @@ function Bar(options) {
     Feedback.addControlMinimize(parentDiv, _self, optionHandlers);
 
     var margin = {
-            top: 5,
+            top: 15,
             right: 5,
             bottom: 25,
             left: 40
@@ -94,10 +94,11 @@ function Bar(options) {
     var y = _self.y = d3.scaleLinear()
         .range([height, 0]);
 
-    var xAxis = d3.axisBottom(x);
+    var xAxis = _self.xAxis = d3.axisBottom(x);
 
-    var yAxis = d3.axisLeft(y)
-        .ticks(10);
+    var yAxis = _self.yAxis = d3.axisLeft(y)
+        .ticks(10)
+        .tickFormat(d3.format("d"));
 
     var svg = _self.svg = d3.select("#" + contentDiv).append("svg")
         .attr("width", width + margin.left + margin.right)
@@ -197,6 +198,33 @@ Bar.prototype.highlight = function (cache) {
 
     console.log(_self.selectedEmotions);
 
+    var max = d3.max(_self.selectedEmotions, function (d) {
+        return d;
+    });
+
+    _self.y.domain([0, max]);
+    _self.yAxis.ticks(max > 10? 10: max);
+    _self.svg.select(".y.axis").transition().duration(100).call(_self.yAxis);
+
+    _self.bars.transition().duration(10)
+        .attr("x", function (d, i) {
+            return _self.x(_self.emotions[i]);
+        })
+        .attr("width", _self.x.bandwidth())
+        .attr("y", function (d) {
+            return _self.y(d);
+        })
+        .attr("height", function (d) {
+            return _self.height - _self.y(d);
+        })
+        .style("fill", function (d, i) {
+            return "rgb(" + "200, 200, 200" + ")";
+        })
+        .style("stroke", function (d, i) {
+            return "transparent";
+        })
+        .style("fill-opacity", 0.1);
+
     var selectedEmotions = _self.selectedEmotions = _self.svg.selectAll(".selectedBar")
         .data(_self.selectedEmotions);
 
@@ -222,6 +250,28 @@ Bar.prototype.highlight = function (cache) {
             return "#222";
         })
         .style("fill-opacity", 0.5);
+
+    _self.selectedEmotions
+        .transition().duration(10)
+        .attr("x", function (d, i) {
+            return _self.x(_self.emotions[i]);
+        })
+        .attr("width", _self.x.bandwidth())
+        .attr("y", function (d) {
+            return _self.y(d);
+        })
+        .attr("height", function (d) {
+            return _self.height - _self.y(d);
+        })
+        .style("fill", function (d, i) {
+            return "rgb(" + colors[i] + ")";
+        })
+        .style("stroke", function (d, i) {
+            return "#222";
+        })
+        .style("fill-opacity", 0.5);
+
+    _self.selectedEmotions.exit().remove();
 }
 
 Bar.prototype.draw = function (cache) {

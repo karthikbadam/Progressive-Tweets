@@ -195,7 +195,7 @@ def readFileProgressive(data, client):
                               "author": tweetDatum["author.name"],
                               "id": counter - 1})
                 tweetDatum["id"] = counter - 1
-
+                tweetDatum["sentiment"] = tweetDatum["rating.1"]
                 counter = counter + 1
 
                 ## maintain a cache of the data

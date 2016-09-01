@@ -113,7 +113,7 @@ function Bar(options) {
     svg.append("g")
         .attr("class", "x axis")
         .attr("transform", "translate(0," + height + ")")
-        .style("font-size", "15px")
+        .style("font-size", "12px")
         .call(xAxis);
 
     svg.append("g")
@@ -124,52 +124,40 @@ function Bar(options) {
         .attr("transform", "rotate(-90)")
         .attr("y", 6)
         .attr("dy", ".71em")
-        .style("font-size", "15px")
+        .style("font-size", "12px")
         .style("text-anchor", "end")
         .text("#Tweets");
 
-    svg.selectAll(".bar")
-        .data([0, 0, 0, 0])
-        .enter().append("rect")
-        .attr("class", "bar")
-        .attr("x", function (d, i) {
-            return x(emotions[i]);
-        })
-        .attr("width", x.bandwidth())
-        .attr("y", function (d) {
-            return y(d);
-        })
-        .attr("height", function (d) {
-            return height - y(d) + 1;
-        })
-        .style("fill-opacity", 0.5);
-
-    svg.selectAll(".cap")
-        .data([0, 0, 0, 0])
-        .enter().append("line")
-        .attr("class", "cap")
-        .attr("x1", function (d, i) {
-            return x(emotions[i]);
-        })
-        .attr("x2", function (d, i) {
-            return x(emotions[i]) - 5;
-        })
-        .attr("y1", function (d) {
-            return y(d);
-        })
-        .attr("y2", function (d) {
-            return y(d);
-        })
-        .attr("stroke-width", 1)
-        .attr("stroke", "#222")
-        .attr("stroke-opacity", 0.5);
+    // svg.selectAll(".cap")
+    //     .data([0, 0, 0, 0])
+    //     .enter().append("line")
+    //     .attr("class", "cap")
+    //     .attr("x1", function (d, i) {
+    //         return x(emotions[i]);
+    //     })
+    //     .attr("x2", function (d, i) {
+    //         return x(emotions[i]) - 5;
+    //     })
+    //     .attr("y1", function (d) {
+    //         return y(d);
+    //     })
+    //     .attr("y2", function (d) {
+    //         return y(d);
+    //     })
+    //     .attr("stroke-width", 1)
+    //     .attr("stroke", "#222")
+    //     .attr("stroke-opacity", 0.5);
 
 }
 
 Bar.prototype.pause = function () {
     var _self = this;
-
     _self.pauseFlag = true;
+    if (_self.pauseFlag) {
+        _self.miniControlDiv.select("#pause").style("background-image", 'url("/images/play.png")');
+    } else {
+        _self.miniControlDiv.select("#pause").style("background-image", 'url("/images/pause.png")');
+    }
 }
 
 
@@ -189,10 +177,15 @@ Bar.prototype.highlight = function (cache) {
     tweetChunk.forEach(function (tweetData, i) {
 
         // Processing the rating
-        var ratingValue = +tweetData["sentiment"];
+        var ratingValue = tweetData["sentiment"];
 
-        if (!isNaN(ratingValue) && ratingValue > 0) {
-            _self.selectedEmotions[ratingValue - 1]++;
+        if (!isNaN(ratingValue) && parseInt(ratingValue) > 0) {
+
+            _self.selectedEmotions[parseInt(ratingValue) - 1]++;
+
+        } else if (isNaN(ratingValue) && _self.emotions.indexOf(ratingValue) >= 0) {
+            //means its a string
+            _self.selectedEmotions[_self.emotions.indexOf(ratingValue)]++;
         }
     });
 
@@ -203,7 +196,7 @@ Bar.prototype.highlight = function (cache) {
     });
 
     _self.y.domain([0, max]);
-    _self.yAxis.ticks(max > 10? 10: max);
+    _self.yAxis.ticks(max > 10 ? 10 : max);
     _self.svg.select(".y.axis").transition().duration(100).call(_self.yAxis);
 
     _self.bars.transition().duration(10)
@@ -218,7 +211,7 @@ Bar.prototype.highlight = function (cache) {
             return _self.height - _self.y(d);
         })
         .style("fill", function (d, i) {
-            return "rgb(" + "200, 200, 200" + ")";
+            return "rgb(200, 200, 200)";
         })
         .style("stroke", function (d, i) {
             return "transparent";
@@ -284,10 +277,15 @@ Bar.prototype.draw = function (cache) {
     tweetChunk.forEach(function (tweetData, i) {
 
         // Processing the rating
-        var ratingValue = +tweetData["sentiment"];
+        var ratingValue = tweetData["sentiment"];
 
-        if (!isNaN(ratingValue) && ratingValue > 0) {
-            _self.emotionValues[ratingValue - 1]++;
+        if (!isNaN(ratingValue) && parseInt(ratingValue) > 0) {
+
+            _self.emotionValues[parseInt(ratingValue) - 1]++;
+
+        } else if (isNaN(ratingValue) && _self.emotions.indexOf(ratingValue) >= 0) {
+            //means its a string
+            _self.emotionValues[_self.emotions.indexOf(ratingValue)]++;
         }
     });
 
@@ -298,7 +296,7 @@ Bar.prototype.draw = function (cache) {
             Feedback.updateProgressBar(_self, progress);
         }
 
-        if (_self.selectedEmotions) {
+        if (_self.selectedEmotions && !_self.selectedEmotions.empty()) {
             _self.selectedEmotions.remove();
         }
 
@@ -317,7 +315,10 @@ Bar.prototype.draw = function (cache) {
         var bars = _self.bars = _self.svg.selectAll(".bar")
             .data(_self.emotionValues);
 
-        _self.bars.transition().duration(10)
+        _self.bars.enter()
+            .append("rect")
+            .attr("class", "bar")
+            .transition().duration(10)
             .attr("x", function (d, i) {
                 return _self.x(_self.emotions[i]);
             })
@@ -335,6 +336,28 @@ Bar.prototype.draw = function (cache) {
                 return "#222";
             })
             .style("fill-opacity", 0.5);
+
+        _self.bars
+            .transition().duration(10)
+            .attr("x", function (d, i) {
+                return _self.x(_self.emotions[i]);
+            })
+            .attr("width", _self.x.bandwidth())
+            .attr("y", function (d) {
+                return _self.y(d);
+            })
+            .attr("height", function (d) {
+                return _self.height - _self.y(d);
+            })
+            .style("fill", function (d, i) {
+                return "rgb(" + colors[i] + ")";
+            })
+            .style("stroke", function (d, i) {
+                return "#222";
+            })
+            .style("fill-opacity", 0.5);
+
+        _self.bars.exit().remove();
 
         // data.forEach(function (d, i) {
         //     _self.svg.append("line")

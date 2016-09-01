@@ -64,7 +64,6 @@ function HorizontalBar(options) {
 
     Feedback.addControlMinimize(parentDiv, _self, optionHandlers);
 
-
     var margin = {
             top: 25,
             right: 20,
@@ -85,10 +84,9 @@ function HorizontalBar(options) {
     var x = _self.x = d3.scaleLinear()
         .range([0, width]);
 
-
     _self.highest = 10;
 
-    var xAxis = _self.xAxis = d3.axisTop(x).ticks(4, ",d").tickSizeInner(height)
+    var xAxis = _self.xAxis = d3.axisTop(x).ticks(5, ",d").tickSizeInner(height)
         .tickSizeOuter(0)
         .tickPadding(10);
 
@@ -121,8 +119,13 @@ function HorizontalBar(options) {
 
 HorizontalBar.prototype.pause = function () {
     var _self = this;
-
     _self.pauseFlag = true;
+    if (_self.pauseFlag) {
+        _self.miniControlDiv.select("#pause").style("background-image", 'url("/images/play.png")');
+    } else {
+        _self.miniControlDiv.select("#pause").style("background-image", 'url("/images/pause.png")');
+    }
+
 
 }
 
@@ -149,14 +152,76 @@ HorizontalBar.prototype.highlight = function (cache) {
 
     });
 
-    _self.selectedUsers = _self.selectedUsers.entries().sort(function (a, b) {
+    _self.selectedUsersData = _self.selectedUsers.entries().sort(function (a, b) {
         return b.value - a.value;
-    }).slice(0, 15);
+    });
 
+    var selectedAuthors = _self.selectedUsersData.map(function (d) {
+            return d.key;
+    }).reverse();
 
+    selectedAuthors = selectedAuthors.concat(_self.y.domain());
 
+    _self.y.domain(selectedAuthors.slice(0, Math.floor(_self.height / 15)).reverse());
+
+    var max = d3.max(_self.selectedUsersData, function (d) {
+        return d.value;
+    });
+
+    _self.x.domain([0, max]);
+
+    _self.xAxis.ticks(max > 5? 5: max);
+
+    _self.svg.select(".x.axis").call(_self.xAxis);
+    _self.svg.select(".y.axis").call(_self.yAxis);
+
+    var selection = _self.svg.selectAll(".bar")
+        .data(_self.selectedUsersData);
+
+    selection.enter()
+        .append("rect")
+        .transition().duration(10)
+        .attr("class", "bar")
+        .attr("y", function (d, i) {
+
+            return _self.y(d.key);
+        })
+        .attr("height", _self.y.bandwidth())
+        .attr("x", function (d) {
+            return 0;
+        })
+        .attr("width", function (d) {
+            return _self.x(d.value);
+        })
+        .style("fill", function (d, i) {
+            return "#EEE";
+        })
+        .style("stroke", function (d, i) {
+            return "#222";
+        })
+        .style("fill-opacity", 1);
+
+    selection.transition().duration(10)
+        .attr("y", function (d, i) {
+            return _self.y(d.key);
+        })
+        .attr("height", _self.y.bandwidth())
+        .attr("x", function (d) {
+            return 0;
+        })
+        .attr("width", function (d) {
+            return _self.x(d.value);
+        })
+        .style("fill", function (d, i) {
+            return "#EEE";
+        })
+        .style("stroke", function (d, i) {
+            return "#222";
+        })
+        .style("fill-opacity", 1);
+
+    selection.exit().transition().duration(10).remove();
 }
-
 
 HorizontalBar.prototype.draw = function (cache) {
 
@@ -181,7 +246,7 @@ HorizontalBar.prototype.draw = function (cache) {
 
     _self.popularUsersData = _self.popularUsers.entries().sort(function (a, b) {
         return b.value - a.value;
-    }).slice(0, 15);
+    }).slice(0, Math.floor(_self.height / 15));
 
     if (!_self.pauseFlag) {
 

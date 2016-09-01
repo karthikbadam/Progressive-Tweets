@@ -42,7 +42,7 @@ body {
 
 #content-middle {
     padding: 0px 0px;
-    width: 30%;
+    width: 20%;
     height: 100%;
     display: inline-block;
     float: left;
@@ -52,7 +52,7 @@ body {
 }
 
 #content-right {
-    width: 39%;
+    width: 49%;
     height: 100%;
     float: left;
     margin-left: 2px;

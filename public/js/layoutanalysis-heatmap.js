@@ -91,7 +91,7 @@ function Heatmap(options) {
     _self.bin2DCols = 40;
 
     _self.heatmapColorScale = d3.scaleLinear()
-        .range(["#deebf7", "#045a8d"]);
+        .range(["#deebf7", "#08306b"]);
 
     // _self.brush = d3.brush()
     //     .extent([[0, 0], [width, height]])
@@ -106,13 +106,8 @@ function Heatmap(options) {
     //             _self.rectLeft = d3.event.selection[0][0] + _self.margin.left;
     //             _self.rectTop = d3.event.selection[0][1] + _self.margin.top;
     //
-    //             var xdomain = xSelection.map(_self.x.invert).sort(function (a, b) {
-    //                 return a - b;
-    //             });
-    //
-    //             var ydomain = ySelection.map(_self.y.invert).sort(function (a, b) {
-    //                 return a - b;
-    //             });
+    //             _self.rectRight = _self.rectLeft + _self.rectWidth;
+    //             _self.rectBottom = _self.rectTop + _self.rectHeight;
     //
     //             if (_self.data) {
     //                 var ids = [];
@@ -152,8 +147,12 @@ function Heatmap(options) {
 
 Heatmap.prototype.pause = function () {
     var _self = this;
-
     _self.pauseFlag = true;
+    if (_self.pauseFlag) {
+        _self.miniControlDiv.select("#pause").style("background-image", 'url("/images/play.png")');
+    } else {
+        _self.miniControlDiv.select("#pause").style("background-image", 'url("/images/pause.png")');
+    }
 }
 
 Heatmap.prototype.draw = function (data) {
@@ -164,140 +163,144 @@ Heatmap.prototype.draw = function (data) {
 
     var progress = data["absolute-progress"];
 
-    Feedback.updateProgressBar(_self, progress);
-
-    _self.heatmapColorScale
-        .domain(d3.extent(_self.data, function (p) {
-            if (p["content"] != 0) {
-                return p["content"];
-            }
-        }));
-
-    // draw rectangles
-    var rectangles = _self.rectangles = _self.svg
-        .selectAll(".block")
-        .data(_self.data);
-
-    rectangles.enter()
-        .append("rect")
-        .attr("class", "block")
-        .attr("x", function (d, i) {
-            return d["col"] * (_self.width / _self.bin2DCols);
-        })
-        .attr("y", function (d, i) {
-            return d["row"] * (_self.height / _self.bin2DRows);
-        })
-        .attr("width", _self.width / _self.bin2DCols)
-        .attr("height", _self.height / _self.bin2DRows)
-        .attr("fill", function (d, i) {
-            if (d["content"] == 0) {
-                return "white";
-            }
-            return _self.heatmapColorScale(d["content"]);
-
-        })
-        .attr("stroke", "#fff")
-        .attr("cell", function (d) {
-            return "r" + d.row + "c" + d.col;
-        })
-        .style("cursor", "pointer")
-        .on("mouseenter", function () {
-            console.log("mouseenter");
-            this.hoverStart = Date.now();
-        })
-        .on("mouseover", function (d, i) {
-            if (Date.now() - this.hoverStart < 1000) {
-                console.log("mouseover");
-                return;
-            } else {
-                hoverStart = Date.now();
-                console.log("mouseover2");
-            }
-            var datum = {
-                row: d["row"],
-                col: d["col"]
-            };
-
-            _self.svg.selectAll(".block")
-                .attr("fill", function (d, i) {
-                    if (d["content"] == 0) {
-                        return "white";
-                    }
-                    return _self.heatmapColorScale(d["content"]);
-                });
-
-            d3.select(this).attr("fill", "#a63603");
-
-            _self.rectWidth = 100;
-            _self.rectHeight = 150;
-
-            _self.rectLeft = d["col"] * (_self.width / _self.bin2DCols) + _self.rectWidth > _self.width ? d["col"] * (_self.width / _self.bin2DCols) - _self.rectWidth + _self.margin.left : d["col"] * (_self.width / _self.bin2DCols) + _self.margin.left;
-            _self.rectTop = d["row"] * (_self.height / _self.bin2DRows) + _self.rectHeight > _self.height ? d["row"] * (_self.height / _self.bin2DRows) - _self.rectHeight + _self.margin.top : d["row"] * (_self.height / _self.bin2DRows) + _self.margin.top;
-
-            socket.send(wrapMessage("request keywords", {content: datum, chunkSize: 30}));
-        })
-        .on("click", function (d, i) {
-
-            var datum = {
-                row: d["row"],
-                col: d["col"]
-            };
-
-            _self.svg.selectAll(".block")
-                .attr("fill", function (d, i) {
-                    if (d["content"] == 0) {
-                        return "white";
-                    }
-                    return _self.heatmapColorScale(d["content"]);
-                });
-
-            d3.select(this).attr("fill", "#a63603");
-
-            _self.rectWidth = 100;
-            _self.rectHeight = 150;
-
-            _self.rectLeft = d["col"] * (_self.width / _self.bin2DCols) + _self.rectWidth > _self.width ? d["col"] * (_self.width / _self.bin2DCols) - _self.rectWidth + _self.margin.left : d["col"] * (_self.width / _self.bin2DCols) + _self.margin.left;
-            _self.rectTop = d["row"] * (_self.height / _self.bin2DRows) + _self.rectHeight > _self.height ? d["row"] * (_self.height / _self.bin2DRows) - _self.rectHeight + _self.margin.top : d["row"] * (_self.height / _self.bin2DRows) + _self.margin.top;
-
-            socket.send(wrapMessage("request tweets", {content: datum, chunkSize: 30}));
-        });
+    if (!_self.pauseFlag) {
 
 
-    rectangles.exit()
-        .remove();
+        Feedback.updateProgressBar(_self, progress);
 
-    rectangles.transition(_self.t)
-        .attr("x", function (d, i) {
-            return d["col"] * (_self.width / _self.bin2DCols);
-        })
-        .attr("y", function (d, i) {
-            return d["row"] * (_self.height / _self.bin2DRows);
-        })
-        .attr("width", _self.width / _self.bin2DCols)
-        .attr("height", _self.height / _self.bin2DRows)
-        .attr("fill", function (d, i) {
-            if (d["content"] == 0) {
-                return "white";
-            }
-            return _self.heatmapColorScale(d["content"]);
-        })
-        .attr("stroke", "#fff")
-        .attr("cell", function (d) {
-            return "r" + d.row + "c" + d.col;
-        });
+        _self.heatmapColorScale
+            .domain(d3.extent(_self.data, function (p) {
+                if (p["content"] != 0) {
+                    return p["content"];
+                }
+            }));
 
-    if (_self.svg.selectAll("#title").empty()) {
-        _self.svg.append("text")
-            .attr("id", "title")
-            .attr("x", _self.margin.left)
-            .attr("y", _self.height + _self.margin.top + 5)
-            .attr("font-size", "11px")
-            .attr("fill", function (d, i) {
-                return "#222";
+        // draw rectangles
+        var rectangles = _self.rectangles = _self.svg
+            .selectAll(".block")
+            .data(_self.data);
+
+        rectangles.enter()
+            .append("rect")
+            .attr("class", "block")
+            .attr("x", function (d, i) {
+                return d["col"] * (_self.width / _self.bin2DCols);
             })
-            .attr("stroke", "transparent")
-            .text("Tweets organized based on similarity in a heatmap");
+            .attr("y", function (d, i) {
+                return d["row"] * (_self.height / _self.bin2DRows);
+            })
+            .attr("width", _self.width / _self.bin2DCols)
+            .attr("height", _self.height / _self.bin2DRows)
+            .attr("fill", function (d, i) {
+                if (d["content"] == 0) {
+                    return "white";
+                }
+                return _self.heatmapColorScale(d["content"]);
 
+            })
+            .attr("stroke", "#fff")
+            .attr("cell", function (d) {
+                return "r" + d.row + "c" + d.col;
+            })
+            .style("cursor", "pointer")
+            .on("mouseenter", function () {
+                console.log("mouseenter");
+                this.hoverStart = Date.now();
+            })
+            .on("mouseover", function (d, i) {
+                if (Date.now() - this.hoverStart < 1000) {
+                    console.log("mouseover");
+                    return;
+                } else {
+                    hoverStart = Date.now();
+                    console.log("mouseover2");
+                }
+                var datum = {
+                    row: d["row"],
+                    col: d["col"]
+                };
+
+                _self.svg.selectAll(".block")
+                    .attr("fill", function (d, i) {
+                        if (d["content"] == 0) {
+                            return "white";
+                        }
+                        return _self.heatmapColorScale(d["content"]);
+                    });
+
+                d3.select(this).attr("fill", "#a63603");
+
+                _self.rectWidth = _self.width / 5;
+                _self.rectHeight = _self.height / 5;
+
+                _self.rectLeft = d["col"] * (_self.width / _self.bin2DCols) + _self.rectWidth > _self.width ? d["col"] * (_self.width / _self.bin2DCols) - _self.rectWidth + _self.margin.left : d["col"] * (_self.width / _self.bin2DCols) + _self.margin.left;
+                _self.rectTop = d["row"] * (_self.height / _self.bin2DRows) + _self.rectHeight > _self.height ? d["row"] * (_self.height / _self.bin2DRows) - _self.rectHeight + _self.margin.top : d["row"] * (_self.height / _self.bin2DRows) + _self.margin.top;
+
+                socket.send(wrapMessage("request keywords", {content: datum, chunkSize: 30}));
+            })
+            .on("click", function (d, i) {
+
+                var datum = {
+                    row: d["row"],
+                    col: d["col"]
+                };
+
+                _self.svg.selectAll(".block")
+                    .attr("fill", function (d, i) {
+                        if (d["content"] == 0) {
+                            return "white";
+                        }
+                        return _self.heatmapColorScale(d["content"]);
+                    });
+
+                d3.select(this).attr("fill", "#a63603");
+
+                _self.rectWidth = _self.width / 5;
+                _self.rectHeight = _self.height / 5;
+
+                _self.rectLeft = d["col"] * (_self.width / _self.bin2DCols) + _self.rectWidth > _self.width ? d["col"] * (_self.width / _self.bin2DCols) - _self.rectWidth + _self.margin.left : d["col"] * (_self.width / _self.bin2DCols) + _self.margin.left;
+                _self.rectTop = d["row"] * (_self.height / _self.bin2DRows) + _self.rectHeight > _self.height ? d["row"] * (_self.height / _self.bin2DRows) - _self.rectHeight + _self.margin.top : d["row"] * (_self.height / _self.bin2DRows) + _self.margin.top;
+
+                socket.send(wrapMessage("request tweets", {content: datum, chunkSize: 30}));
+            });
+
+
+        rectangles.exit()
+            .remove();
+
+        rectangles.transition(_self.t)
+            .attr("x", function (d, i) {
+                return d["col"] * (_self.width / _self.bin2DCols);
+            })
+            .attr("y", function (d, i) {
+                return d["row"] * (_self.height / _self.bin2DRows);
+            })
+            .attr("width", _self.width / _self.bin2DCols)
+            .attr("height", _self.height / _self.bin2DRows)
+            .attr("fill", function (d, i) {
+                if (d["content"] == 0) {
+                    return "white";
+                }
+                return _self.heatmapColorScale(d["content"]);
+            })
+            .attr("stroke", "#fff")
+            .attr("cell", function (d) {
+                return "r" + d.row + "c" + d.col;
+            });
+
+        if (_self.svg.selectAll("#title").empty()) {
+            _self.svg.append("text")
+                .attr("id", "title")
+                .attr("x", _self.margin.left)
+                .attr("y", _self.height + _self.margin.top + 5)
+                .attr("font-size", "14px")
+                .attr("fill", function (d, i) {
+                    return "#222";
+                })
+                .attr("stroke", "transparent")
+                .text("Tweets organized based on similarity in a heatmap");
+
+        }
     }
 }
 
@@ -321,13 +324,6 @@ Heatmap.prototype.drawKeywords = function (allKeywords) {
 
     });
 
-
-    _self.popularKeywords = _self.popularKeywords.entries().sort(function (a, b) {
-        return b.value - a.value;
-    }).slice(0, 10);
-
-    console.log(_self.popularKeywords);
-
     d3.select("#keywordDiv").remove();
 
     _self.keywordDiv = d3.select('#' + _self.contentDiv).append("div")
@@ -341,10 +337,7 @@ Heatmap.prototype.drawKeywords = function (allKeywords) {
         .style("left", _self.rectLeft + "px")
         .style("top", _self.rectTop + "px");
 
-    _self.keywordDefaultSize = 150;
-    _self.keywordbar = new KeywordBar("keywordDiv", _self.popularKeywords,
-        _self.rectWidth > _self.keywordDefaultSize / 2 ? _self.rectWidth : _self.keywordDefaultSize / 2,
-        _self.rectHeight > _self.keywordDefaultSize ? _self.rectHeight : _self.keywordDefaultSize);
+    _self.keywordbar = new KeywordBar("keywordDiv", _self.popularKeywords, _self.width / 5, _self.height / 5);
 
 }
 
@@ -372,8 +365,6 @@ function KeywordBar(parentDiv, data, rectWidth, rectHeight) {
     var x = _self.x = d3.scaleLinear()
         .range([0, width]);
 
-    _self.highest = 5;
-
     var svg = _self.svg = d3.select("#" + parentDiv).append("svg")
         .attr("width", width + margin.left + margin.right)
         .attr("height", height + margin.top + margin.bottom)
@@ -381,6 +372,10 @@ function KeywordBar(parentDiv, data, rectWidth, rectHeight) {
         .style("pointer-events", "none")
         .append("g")
         .attr("transform", "translate(" + margin.left + "," + margin.top + ")");
+
+    data = data.entries().sort(function (a, b) {
+        return b.value - a.value;
+    }).slice(0, Math.floor(_self.height / 15));
 
     _self.y.domain(data.map(function (d) {
         return d.key;
@@ -453,7 +448,7 @@ function KeywordBar(parentDiv, data, rectWidth, rectHeight) {
         .attr("fill", function (d, i) {
             return "#222";
         })
-        .attr("font-size", "9px")
+        .attr("font-size", "11px")
         .text(function (d, i) {
             return d.key + " (" + d.value + ")";
         })

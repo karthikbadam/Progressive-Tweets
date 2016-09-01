@@ -4,11 +4,18 @@
 
 var socket;
 
-var dataFile = "twitter_debate.txt";
+//var dataFile = "general_debate2008.txt";
+var dataFile = "republican_debate2016.txt";
 
 var sentimentBar, userBar, textScatter, list = null;
 
 var emotions = ["negative", "positive", "mixed", "other"];
+
+if (dataFile == "republican_debate2016.txt") {
+
+    emotions = ["Negative", "Positive", "Neutral"];
+
+}
 
 var emotionValues = new Array(emotions.length);
 
@@ -132,7 +139,7 @@ $(document).ready(function () {
 
         // process tweets into an array
         list.pause();
-        list.draw(cache);
+        list.highlight(cache);
 
 
     });
@@ -148,7 +155,7 @@ $(document).ready(function () {
     });
 
     // Create Tweet List
-    list = new List ();
+    list = new List();
 
     // Create sentiment bar chart
     sentimentBar = new Bar({
@@ -157,6 +164,7 @@ $(document).ready(function () {
 
     // Create sentiment bar chart
     userBar = new HorizontalBar();
+
 
 });
 

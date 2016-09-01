@@ -11,37 +11,6 @@ var Feedback = {
         var progressHeight = _self.progressHeight = 20;
         var progressWidth = _self.progressWidth = $("#" + divID).width();
 
-        // _self.progressCurrentDiv = d3.select('#' + divID).append("div")
-        //     .attr("id", "progressDivCurrent")
-        //     .style("background-color", progressColor)
-        //     .style("height", progressHeight + "px")
-        //     .style("width", "0%")
-        //     .style("display", "inline-block")
-        //     .style("vertical-align", "middle")
-        //     .attr("align", "right");
-        //
-        // _self.progressCurrentDiv.append("span")
-        //     .style("font-size", function () {
-        //         return getFontSize(this, $("#" + divID).width());
-        //     })
-        //     .style("position", "relative")
-        //     .style("margin-right", "3px");
-        //
-        // _self.progressTotalDiv = d3.select('#' + divID).append("div")
-        //     .attr("id", "progressDivTotal")
-        //     .style("background-color", "white")
-        //     .style("height", progressHeight + "px")
-        //     .style("width", "100%")
-        //     .style("display", "inline-block")
-        //     .style("vertical-align", "middle")
-        //     .style("vertical-align", "middle")
-        //     .style("overflow", "hidden")
-        //     .attr("align", "right");
-
-        // _self.progressTotalDiv.append("span")
-        //     .style("font-size", "11px")
-        //     .style("position", "relative");
-
         _self.progressCurrentDiv = d3.select('#' + divID).append("div")
             .attr("id", "progressDivCurrent")
             .style("height", progressHeight + "px")
@@ -57,7 +26,7 @@ var Feedback = {
         _self.progressCurrentSvgDefs = _self.progressCurrentSvg.append("defs")
             .append("linearGradient")
             .attr("id", "temperature-gradient")
-            .attr("gradientUnits", "userSpaceOnUse");
+            .attr("gradientUnits", "objectBoundingBox");
 
         _self.tweetContentDiv = d3.select('#' + divID).append("div")
             .attr("id", "content" + divID)
@@ -75,12 +44,6 @@ var Feedback = {
 
     updateProgressBar: function (context, progress) {
         var _self = context;
-
-        // _self.progressCurrentDiv.style("width", Math.round(progress["current"] * 100 / progress["total"]) + "%");
-        // _self.progressTotalDiv.style("width", 100 - Math.round(progress["current"] * 100 / progress["total"]) + "%");
-        //
-        // _self.progressCurrentDiv.select("span").text(Math.round(progress["current"]));
-        // _self.progressTotalDiv.select("span").text(Math.round(progress["total"]));
 
         _self.progressHistories.push(progress);
 
@@ -137,41 +100,6 @@ var Feedback = {
                 });
         }
 
-        // var progressBars = _self.progressCurrentSvg.selectAll(".progress")
-        //     .data(_self.progressHistories);
-        //
-        // progressBars.enter()
-        //     .append("rect")
-        //     .attr("class", "progress")
-        //     .attr("x", function (d, i) {
-        //         return d["current"] / d["total"] * _self.progressWidth;
-        //     })
-        //     .attr("y", 0)
-        //     .attr("width", _self.pWidth + 1)
-        //     .attr("height", _self.progressHeight)
-        //     .style("fill", function (d) {
-        //         return _self.progressColorScale(d["relative"]);
-        //     })
-        //     .style("fill-opacity", function (d) {
-        //         return 0.5;
-        //     });
-        //
-        // progressBars
-        //     .attr("x", function (d, i) {
-        //         return d["current"] / d["total"] * _self.progressWidth;
-        //     })
-        //     .attr("y", 0)
-        //     .attr("width", _self.pWidth)
-        //     .attr("height", _self.progressHeight)
-        //     .style("fill", function (d) {
-        //         return _self.progressColorScale(d["relative"]);
-        //     })
-        //     .style("fill-opacity", function (d) {
-        //         return 0.5;
-        //     });
-        //
-        // progressBars.exit().remove();
-
         var progressAnnotations = _self.progressCurrentSvg.selectAll(".annotation")
             .data([progress["current"], progress["total"]]);
 
@@ -188,7 +116,7 @@ var Feedback = {
                 if (i == 0) {
                     return progress["current"] / progress["total"] * _self.progressWidth + 2;
                 } else {
-                    return _self.progressWidth - 20;
+                    return _self.progressWidth - d.toString().length * 5;
                 }
             })
             .attr("fill", function (d, i) {
@@ -212,7 +140,7 @@ var Feedback = {
                 if (i == 0) {
                     return progress["current"] / progress["total"] * _self.progressWidth + 2;
                 } else {
-                    return _self.progressWidth - 20;
+                    return _self.progressWidth - d.toString().length * 5;
                 }
             })
             .attr("fill", function (d, i) {

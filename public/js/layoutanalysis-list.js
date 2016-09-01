@@ -50,11 +50,66 @@ function List(options) {
 
 
 List.prototype.pause = function () {
-    var _self = this;
-
+     var _self = this;
     _self.pauseFlag = true;
+    if (_self.pauseFlag) {
+        _self.miniControlDiv.select("#pause").style("background-image", 'url("/images/play.png")');
+    } else {
+        _self.miniControlDiv.select("#pause").style("background-image", 'url("/images/pause.png")');
+    }
 }
 
+List.prototype.highlight = function (cache) {
+
+    var _self = this;
+
+    var chunkId = cache["id"];
+    var tweetChunk = cache["content"];
+
+    _self.textContentDiv.selectAll("div").remove();
+
+    tweetChunk.forEach(function (textData, i) {
+        // Adding tweet to the list
+        var textId = textData["id"];
+
+        var sentiment = 0;
+
+        if (!isNaN(textData["sentiment"]) && textData["sentiment"] > 0) {
+
+            sentiment = textData["sentiment"] - 1;
+
+        } else if (isNaN(textData["sentiment"]) && emotions.indexOf(textData["sentiment"]) >= 0) {
+
+            //means its a string
+            sentiment = emotions.indexOf(textData["sentiment"]);
+        }
+
+        _self.textContentDiv.append("div")
+            .attr("id", "list" + textId)
+            .style("background-color",
+                "rgba(" + colors[sentiment] + ",0.5)")
+            .style("margin", "2px")
+            .append("div")
+            .style("margin-left", "10px")
+            .style("padding-left", "2px")
+            .style("background-color", "white")
+            .text((textId + 1) + ": " + textData["content"]);
+
+        _self.currentHeight = _self.currentHeight + $("#list" + textId).height();
+
+        //if current height is higher than maximum height then delete elements
+        if (_self.currentHeight > _self.divHeight) {
+
+            _self.textContentDiv.select("#list" + _self.lastTextId).remove();
+
+            _self.lastTextId = _self.lastTextId + 1;
+
+            _self.currentHeight = _self.divHeight;
+
+        }
+    });
+
+}
 
 List.prototype.requestData = function (cache) {
 
@@ -70,9 +125,9 @@ List.prototype.draw = function (cache) {
     var tweetChunk = cache["content"];
     var progress = cache["absolute-progress"];
 
-    Feedback.updateProgressBar(_self, progress);
-
     if (!_self.pauseFlag) {
+
+        Feedback.updateProgressBar(_self, progress);
 
         tweetChunk.forEach(function (textData, i) {
 
@@ -81,16 +136,27 @@ List.prototype.draw = function (cache) {
 
             socket.send(wrapMessage("request layout", {content: textId, chunkSize: 200}));
 
+            if (!isNaN(textData["sentiment"]) && textData["sentiment"] > 0) {
+
+                sentiment = textData["sentiment"] - 1;
+
+            } else if (isNaN(textData["sentiment"]) && emotions.indexOf(textData["sentiment"]) >= 0) {
+
+                //means its a string
+                sentiment = emotions.indexOf(textData["sentiment"]);
+            }
+
             _self.textContentDiv.append("div")
                 .attr("id", "list" + textId)
                 .style("background-color",
-                    "rgba(" + colors[parseInt(textData["sentiment"]) - 1] + ",0.5)")
+                    "rgba(" + colors[sentiment] + ",0.5)")
                 .style("margin", "2px")
                 .append("div")
                 .style("margin-left", "10px")
                 .style("padding-left", "2px")
                 .style("background-color", "white")
                 .text((textId + 1) + ": " + textData["content"]);
+
 
             _self.currentHeight = _self.currentHeight + $("#list" + textId).height();
 
@@ -106,9 +172,5 @@ List.prototype.draw = function (cache) {
             }
         });
     }
-
-    // Automatially scroll to the bottom as new texts are added
-    var elem = document.getElementById(_self.contentDiv);
-    elem.scrollTop = elem.scrollHeight;
 
 }

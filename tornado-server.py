@@ -1,4 +1,3 @@
-from nltk.corpus.reader import WordNetError
 
 import Settings
 import tornado.escape
@@ -6,6 +5,7 @@ import tornado.ioloop
 import tornado.web as web
 import tornado.websocket
 from tornado import gen
+import random
 from tornado import iostream
 import tornadis
 from concurrent.futures import ProcessPoolExecutor, ThreadPoolExecutor
@@ -46,9 +46,11 @@ totalLines = 1
 bin2DRows = 40
 bin2DCols = 40
 
+distance = np.zeros([1, 1])
+distance2 = np.zeros([1, 1])
+
 # thread_pool = ProcessPoolExecutor(100)
 thread_pool = ThreadPoolExecutor(200)
-distance = np.zeros([1, 1])
 
 ## -------------------------------------------------------------------
 stemmer = PorterStemmer()
@@ -166,7 +168,7 @@ def readFileProgressive(data, client):
     totalSize = os.path.getsize("public/data/" + filename)
     bytesRead = 0.0
 
-    lineNumber = 1.0
+    lineNumber = 1
     chunkBytes = 0.0
 
     with open("public/data/" + filename, 'r') as infile:
@@ -192,30 +194,37 @@ def readFileProgressive(data, client):
                               "author": tweetDatum[authorNameCol],
                               "id": counter - 1})
 
-                tweetDatum["id"] = lineNumber - 1
-                tweetDatum["sentiment"] = tweetDatum[sentimentCol]
-                tweetDatum["content"] = tweetDatum[tweetContentCol]
-                tweetDatum["author"] = tweetDatum[authorNameCol]
+                tweetDatumOut = {}
+                tweetDatumOut["id"] = lineNumber - 1
+                tweetDatumOut["sentiment"] = tweetDatum[sentimentCol]
+                tweetDatumOut["content"] = tweetDatum[tweetContentCol]
+                tweetDatumOut["author"] = tweetDatum[authorNameCol]
+                tweetDatumOut["keywords"] = tokenizeTweets({"content": tweetDatum[tweetContentCol]})
                 counter = counter + 1
 
-                ## maintain a cache of the data
-                ## Lets add keywords right here
-                tweetDatum["keywords"] = tokenizeTweets({"content": tweetDatum[tweetContentCol]})
+                tweetDatumOut["syncset"] = []
+                for word in tweetDatumOut["keywords"]:
+                    syncset = wordnet.synsets(word)
+                    tweetDatumOut["syncset"].append(word)
+                    for ss in syncset:
+                        tweetDatumOut["syncset"].append(ss.name().split(".")[0])
 
-                # print "Before syncset"
-                # print(tweetDatum["keywords"])
+                #tweetDatumOut["syncset"] = set(tweetDatumOut["syncset"])
 
-                # try:
-                #     tweetDatum["syncset"] = set(ss for word in tweetDatum["keywords"] for ss in wordnet.synsets(word))
-                #     break
-                # except WordNetError:
-                #     print "Oops!  WordNetError"
-                #     tweetDatum["syncset"] = set([])
+                # compute distance2
+                if lineNumber == 1:
+                    distance2[0][0] = 0
+                else:
+                    distance2.resize(lineNumber, lineNumber)
+                    for i, cTweet in enumerate(contentCache):
+                        distance2[lineNumber - 1][i] = semantic(cTweet["syncset"], tweetDatumOut["syncset"])
+                        #distance2[lineNumber - 1][i] = jaccard(cTweet["keywords"], tweetDatumOut["keywords"])
+                        distance2[i][lineNumber - 1] = distance2[lineNumber - 1][i]
+                    distance2[lineNumber - 1][lineNumber - 1] = 0
 
-                # print "After syncset"
 
                 if len(contentCache) < lineNumber:
-                    contentCache.append(tweetDatum)
+                    contentCache.append(tweetDatumOut)
 
                 if counter % chunkSize == 1 and counter >= chunkSize:
                     chunkCounter = chunkCounter + 1
@@ -229,7 +238,7 @@ def readFileProgressive(data, client):
                         "relative": chunkBytes
                     }
 
-                    if renderStop == True:
+                    if renderStop:
                         break
 
                     client.send_message("file content", message)
@@ -238,9 +247,9 @@ def readFileProgressive(data, client):
                     counter = 1
                     chunkBytes = 0
 
-                time.sleep(0.08)
+                time.sleep(0.01)
 
-                lineNumber = lineNumber + 1
+                lineNumber += 1
 
     totalLines = linesRead
 
@@ -272,26 +281,43 @@ def jaccard(list1, list2):
     return 1.0 - similarity
 
 def semantic(allsyns1, allsyns2):
-    sum = 0.
-    count = 0
+    sum = 0.0
+    count = 0.0
 
-    #print(allsyns1)
     #print(allsyns2)
+    # for s1 in allsyns1:
+    #     for s2 in allsyns2:
+    #         score = s1.wup_similarity(s2)
+    #         if score is None:
+    #             score = 0
+    #         sum = sum + score
+    #         count += 1
+    #
+    # if count == 0:
+    #     count = 1
+    #
 
-    for s1, s2 in product(allsyns1, allsyns2):
-        score = wordnet.wup_similarity(s1, s2)
-        if score is None:
-            score = 0
-        sum = sum + score
-        count += 1
 
-    if count == 0:
-        count = 1
+    # number of common elements between two arrays
+    sum = len(list(set(allsyns1) & set(allsyns2))) + 0.0
+    count = len(list(set(allsyns1))) + len(list(set(allsyns2))) - sum + 0.0
+    if count == 0.0:
+        count = 1.0
 
     similarity = sum / count
-    print(similarity)
 
+    print str(sum) + " " + str(count) + " " + str(similarity)
     return 1.0 - similarity
+
+    # if len(allsyns1) > 0 and len(allsyns2) > 0:
+    #     score = allsyns1[0].wup_similarity(allsyns2[0])
+    #     if score is None:
+    #         score = 0
+    #     return 1 - score
+    #
+    # return 1
+
+
 
 
 def layoutGenerationProgressive(data, client):
@@ -301,19 +327,17 @@ def layoutGenerationProgressive(data, client):
     chunkSize, tweetsCopy, current = sliceTweets(data)
     size = data["content"] + 1
 
-    if size == 1:
-        distance[0][0] = 0
-    else:
-        distance.resize(size, size)
-
-        for i, cTweet in enumerate(tweetsCopy):
-            # distance[size - 1][i] = jaccard(set(cTweet["keywords"]), set(current["keywords"]))
-            # distance[i][size - 1] = jaccard(set(cTweet["keywords"]), set(current["keywords"]))
-            #distance[size - 1][i] = semantic(cTweet["syncset"], current["syncset"])
-            distance[size - 1][i] = jaccard(cTweet["keywords"], current["keywords"])
-            distance[i][size - 1] = distance[size - 1][i]
-
-        distance[size - 1][size - 1] = 0
+    # if size == 1:
+    #     distance[0][0] = 0
+    # else:
+    #     distance.resize(size, size)
+    #
+    #     for i, cTweet in enumerate(tweetsCopy):
+    #         #distance[size - 1][i] = semantic(cTweet["syncset"], current["syncset"])
+    #         distance[size - 1][i] = jaccard(cTweet["keywords"], current["keywords"])
+    #         distance[i][size - 1] = distance[size - 1][i]
+    #
+    #     distance[size - 1][size - 1] = 0
 
     layoutPacketCounter = size
 
@@ -328,7 +352,8 @@ def layoutGenerationProgressive(data, client):
         # number of iterations based on input from the client
         model = TSNE(n_components=2, init='pca', random_state=1, method='barnes_hut', n_iter=200, verbose=2)
 
-        spatialData = model.fit_transform(np.copy(distance))
+        distance = np.copy(distance2[0:layoutPacketCounter+1, 0:layoutPacketCounter+1])
+        spatialData = model.fit_transform(distance)
         spatialLayout = spatialData.tolist()
 
         # ## first time
@@ -400,7 +425,7 @@ def layoutGenerationProgressive(data, client):
         returnData["absolute-progress"] = {
             "current": layoutPacketCounter,
             "total": totalLines,
-            "relative": layoutPacketCounter
+            "relative": model.kl_divergence_
         }
         client.send_message('spatial content', returnData)
 

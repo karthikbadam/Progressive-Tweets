@@ -50,7 +50,7 @@ function List(options) {
 
 
 List.prototype.pause = function () {
-     var _self = this;
+    var _self = this;
     _self.pauseFlag = true;
     if (_self.pauseFlag) {
         _self.miniControlDiv.select("#pause").style("background-image", 'url("/images/play.png")');
@@ -93,7 +93,7 @@ List.prototype.highlight = function (cache) {
             .style("margin-left", "10px")
             .style("padding-left", "2px")
             .style("background-color", "white")
-            .text((textId + 1) + ": " + textData["content"]);
+            .text(textData["textId"] + ": " + textData["author"] + ": " + ": " + textData["content"]);
 
         _self.currentHeight = _self.currentHeight + $("#list" + textId).height();
 
@@ -155,7 +155,7 @@ List.prototype.draw = function (cache) {
                 .style("margin-left", "10px")
                 .style("padding-left", "2px")
                 .style("background-color", "white")
-                .text((textId + 1) + ": " + textData["content"]);
+                .text(textData["textId"] + ": " + textData["author"] + ": " + textData["content"]);
 
 
             _self.currentHeight = _self.currentHeight + $("#list" + textId).height();

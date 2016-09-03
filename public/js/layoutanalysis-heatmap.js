@@ -62,7 +62,7 @@ function Heatmap(options) {
     Feedback.addControlMinimize(parentDiv, _self, optionHandlers);
 
     var margin = _self.margin = {
-            top: 5,
+            top: 25,
             right: 5,
             bottom: 25,
             left: 5

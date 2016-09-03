@@ -1,4 +1,3 @@
-
 import Settings
 import tornado.escape
 import tornado.ioloop
@@ -31,6 +30,7 @@ import gensim
 from gensim import corpora, models
 import logging
 from itertools import product
+from vaderSentiment.vaderSentiment import sentiment as vaderSentiment
 
 ## Logging all the messages
 logging.basicConfig(format='%(levelname)s:%(message)s', level=logging.DEBUG)
@@ -46,8 +46,7 @@ totalLines = 1
 bin2DRows = 40
 bin2DCols = 40
 
-distance = np.zeros([1, 1])
-distance2 = np.zeros([1, 1])
+distancetexts = np.zeros([1, 1])
 
 # thread_pool = ProcessPoolExecutor(100)
 thread_pool = ThreadPoolExecutor(200)
@@ -59,13 +58,12 @@ wordnetLemmatizer = WordNetLemmatizer()
 # Columns in the text dataset -- republican dataset
 sentimentCol = "sentiment"
 authorNameCol = "name"
-tweetContentCol = "text"
-
+textContentCol = "text"
 
 # # Columns in the text dataset -- general dataset
 # sentimentCol = "rating.1"
 # authorNameCol = "author.name"
-# tweetContentCol = "content"
+# textContentCol = "content"
 
 def stem_tokens(tokens, stemmer):
     stemmed = []
@@ -86,28 +84,32 @@ def tokenize(text):
 
 
 stopset = stopwords.words('english')
-freq_words = ['http', 'https', 'amp', 'com', 'co', 'th', 'tweetdebate', 'debate', 'mccain', 'obama', 'gopdebate', 'rt']
+freq_words = ['http', 'https', 'amp', 'com', 'co', 'th', 'textdebate', 'debate', 'mccain', 'obama', 'gopdebate', 'gopdebates', 'rt']
 for i in freq_words:
     stopset.append(i)
 
 textCorpus = []
 
 
-def generateKeywords(tweet):
-    tweet = re.sub("[^a-zA-Z]", " ", tweet)  # Removing numbers and punctuation
-    tweet = re.sub(" +", " ", tweet)  # Removing extra white space
-    tweet = re.sub("\\b[a-zA-Z0-9]{0,1}\\b", " ", tweet)  # Removing single characters (e.g k, K)
-    temp = nltk.word_tokenize(tweet.strip())
+def generateKeywords(text):
+    text = re.sub("[^a-zA-Z]", " ", text)  # Removing numbers and punctuation
+    text = re.sub(" +", " ", text)  # Removing extra white space
+    text = re.sub("\\b[a-zA-Z0-9]{0,1}\\b", " ", text)  # Removing single characters (e.g k, K)
+    temp = nltk.word_tokenize(text.strip())
     temp = nltk.pos_tag(temp)
 
     currentDoc = []
     for word in range(len(temp)):
         if temp[word][0].lower() not in stopset and temp[word][1] in ["NN", "NNP", "NNS", "NNPS", "VBD", "VB", "VBG",
-                                                                      "VBN",
-                                                                      "VBP", "VBZ"]:
-            currentDoc.append(temp[word][0].lower())
+                                                                      "VBN", "VBP", "VBZ"]:
+            # lemmatized
+            synsets = wordnet.synsets(temp[word][0].lower())
+            if len(synsets) > 0:
+                currentDoc.append(synsets[0].name().split(".")[0])
+            else:
+                currentDoc.append(temp[word][0].lower())
 
-    # bigrams = ngrams(nltk.word_tokenize(tweet.lower().strip()), 2)
+    # bigrams = ngrams(nltk.word_tokenize(text.lower().strip()), 2)
     # bigrams = list(ngrams(currentDoc, 2))
 
     # newDoc = []
@@ -115,7 +117,7 @@ def generateKeywords(tweet):
     #     newDoc.append(bigram[0] + " " + bigram[1])
     #     currentDoc.append(bigram[0] + " " + bigram[1])
 
-    # bigrams = ngrams(nltk.word_tokenize(tweet.lower().strip()), 2)
+    # bigrams = ngrams(nltk.word_tokenize(text.lower().strip()), 2)
     # trigrams = list(ngrams(currentDoc, 3))
     #
     # for trigram in trigrams:
@@ -123,11 +125,10 @@ def generateKeywords(tweet):
     #     currentDoc.append(trigram[0] + " " + trigram[1] + " " + trigram[2])
 
     return currentDoc
-    # return newDoc
 
 
-def generate(tweet):
-    temp = tokenize(tweet)
+def generate(text):
+    temp = tokenize(text)
     currentDoc = []
     for word in range(len(temp)):
         if temp[word][0] not in stopset and temp[word][1] == 'NN':
@@ -178,7 +179,7 @@ def readFileProgressive(data, client):
                 totalSize = totalSize - sys.getsizeof(line)
                 counter = 1
             else:
-                tweetDatum = {}
+                textDatum = {}
 
                 bytesRead = bytesRead + len(line)
                 linesRead = lineNumber
@@ -187,44 +188,57 @@ def readFileProgressive(data, client):
 
                 values = line.strip().split("\t")
                 for i, value in enumerate(values):
-                    tweetDatum[colnames[i]] = unicode(value, errors='ignore')
+                    textDatum[colnames[i]] = unicode(value, errors='ignore')
 
-                cache.append({"content": tweetDatum[tweetContentCol],
-                              "sentiment": tweetDatum[sentimentCol],
-                              "author": tweetDatum[authorNameCol],
+                cache.append({"content": textDatum[textContentCol],
+                              "sentiment": textDatum[sentimentCol],
+                              "author": textDatum[authorNameCol],
+                              "textId": textDatum["id"],
                               "id": counter - 1})
 
-                tweetDatumOut = {}
-                tweetDatumOut["id"] = lineNumber - 1
-                tweetDatumOut["sentiment"] = tweetDatum[sentimentCol]
-                tweetDatumOut["content"] = tweetDatum[tweetContentCol]
-                tweetDatumOut["author"] = tweetDatum[authorNameCol]
-                tweetDatumOut["keywords"] = tokenizeTweets({"content": tweetDatum[tweetContentCol]})
+                textDatumOut = {}
+                textDatumOut["id"] = lineNumber - 1
+                textSentimentVader = vaderSentiment(textDatum[textContentCol])
+                # {'neg': 0.0, 'neu': 0.254, 'pos': 0.746, 'compound': 0.8316}
+
+                maxSentiment = "neutral"
+                max = 0
+                for key in textSentimentVader.keys():
+                    if textSentimentVader[key] > max:
+                        max = textSentimentVader[key]
+                        maxSentiment = "Positive" if key is "pos" else "Negative" if key is "neg" else "Neutral"
+
+                textDatumOut["sentiment"] = maxSentiment
+                textDatumOut["content"] = textDatum[textContentCol]
+                textDatumOut["author"] = textDatum[authorNameCol]
+                textDatumOut["textId"] = textDatum["id"]
+                textDatumOut["keywords"] = tokenizetexts({"content": textDatum[textContentCol]})
                 counter = counter + 1
 
-                tweetDatumOut["syncset"] = []
-                for word in tweetDatumOut["keywords"]:
-                    syncset = wordnet.synsets(word)
-                    tweetDatumOut["syncset"].append(word)
-                    for ss in syncset:
-                        tweetDatumOut["syncset"].append(ss.name().split(".")[0])
+                # textDatumOut["syncset"] = []
+                # for word in textDatumOut["keywords"]:
+                #     syncset = wordnet.synsets(word)
+                #     textDatumOut["syncset"].append(word)
+                #     for ss in syncset:
+                #         textDatumOut["syncset"].append(ss.name().split(".")[0])
 
-                #tweetDatumOut["syncset"] = set(tweetDatumOut["syncset"])
+                # textDatumOut["syncset"] = set(textDatumOut["syncset"])
 
                 # compute distance2
                 if lineNumber == 1:
-                    distance2[0][0] = 0
+                    distancetexts[0][0] = 0
                 else:
-                    distance2.resize(lineNumber, lineNumber)
-                    for i, cTweet in enumerate(contentCache):
-                        distance2[lineNumber - 1][i] = semantic(cTweet["syncset"], tweetDatumOut["syncset"])
-                        #distance2[lineNumber - 1][i] = jaccard(cTweet["keywords"], tweetDatumOut["keywords"])
-                        distance2[i][lineNumber - 1] = distance2[lineNumber - 1][i]
-                    distance2[lineNumber - 1][lineNumber - 1] = 0
-
+                    if lineNumber > distancetexts.shape[0]:
+                        distancetexts.resize(totalLines, totalLines)
+                    for i, ctext in enumerate(contentCache):
+                        # distance2[lineNumber - 1][i] = jaccard(ctext["keywords"], textDatumOut["keywords"])
+                        # distance2[lineNumber - 1][i] = semantic(ctext["syncset"], textDatumOut["syncset"])
+                        distancetexts[lineNumber - 1][i] = semantic(ctext["keywords"], textDatumOut["keywords"])
+                        distancetexts[i][lineNumber - 1] = distancetexts[lineNumber - 1][i]
+                    distancetexts[lineNumber - 1][lineNumber - 1] = 0
 
                 if len(contentCache) < lineNumber:
-                    contentCache.append(tweetDatumOut)
+                    contentCache.append(textDatumOut)
 
                 if counter % chunkSize == 1 and counter >= chunkSize:
                     chunkCounter = chunkCounter + 1
@@ -254,13 +268,13 @@ def readFileProgressive(data, client):
     totalLines = linesRead
 
 
-def sliceTweets(data):
+def slicetexts(data):
     global contentCache
     index = data["content"]
     return data["chunkSize"], contentCache[:index], contentCache[index]
 
 
-def tokenizeTweets(data):
+def tokenizetexts(data):
     return generateKeywords(data["content"])
 
 
@@ -280,11 +294,15 @@ def jaccard(list1, list2):
 
     return 1.0 - similarity
 
+
+wordToSet = {}
+
 def semantic(allsyns1, allsyns2):
+    global wordToSet
     sum = 0.0
     count = 0.0
 
-    #print(allsyns2)
+    # print(allsyns2)
     # for s1 in allsyns1:
     #     for s2 in allsyns2:
     #         score = s1.wup_similarity(s2)
@@ -299,15 +317,49 @@ def semantic(allsyns1, allsyns2):
 
 
     # number of common elements between two arrays
-    sum = len(list(set(allsyns1) & set(allsyns2))) + 0.0
-    count = len(list(set(allsyns1))) + len(list(set(allsyns2))) - sum + 0.0
-    if count == 0.0:
-        count = 1.0
+    # sum = len(list(set(allsyns1) & set(allsyns2))) + 0.0
+    # count = len(list(set(allsyns1))) + len(list(set(allsyns2))) - sum + 0.0
+    # if count == 0.0:
+    #     count = 1.0
+    #
+    # similarity = sum / count
+    #
 
-    similarity = sum / count
+    for s1 in allsyns1:
+        if s1 not in wordToSet:
+            wordToSet[s1] = [sset.name() for sset in wordnet.synsets(s1)]
 
-    print str(sum) + " " + str(count) + " " + str(similarity)
-    return 1.0 - similarity
+    for s2 in allsyns2:
+        if s2 not in wordToSet:
+            wordToSet[s2] = [sset.name() for sset in wordnet.synsets(s2)]
+
+    for s1 in allsyns1:
+        for s2 in allsyns2:
+            if s1 == s2:
+                sum += 1.0
+            else:
+                syncset1 = wordToSet[s1]
+                syncset2 = wordToSet[s2]
+                if len(syncset1) > 0 and len(syncset2) > 0:
+                    # score = syncset1[0].wup_similarity(syncset2[0])
+                    score = 1.0 if len(list(set(syncset1) & set(syncset2))) > 0 else 0.0
+                    if score is not None and score is not 0.0:
+                        sum += score
+
+    count = len(list(set(allsyns1))) + len(list(set(allsyns2))) + 0.0
+
+    #print (count - 2* sum)
+
+    return count - 2 * sum
+
+    #if count == 0.0:
+    #    count = 1.0
+
+    # similarity = 2 * sum / count
+
+    #print str(sum) + " " + str(count) + " " + str(similarity)
+
+    #return (1.0 - similarity) * count
 
     # if len(allsyns1) > 0 and len(allsyns2) > 0:
     #     score = allsyns1[0].wup_similarity(allsyns2[0])
@@ -318,23 +370,21 @@ def semantic(allsyns1, allsyns2):
     # return 1
 
 
-
-
 def layoutGenerationProgressive(data, client):
-    global distance
     global layoutCache
 
-    chunkSize, tweetsCopy, current = sliceTweets(data)
+    chunkSize = data["chunkSize"]
     size = data["content"] + 1
 
+    # chunkSize, textsCopy, current = slicetexts(data)
     # if size == 1:
     #     distance[0][0] = 0
     # else:
     #     distance.resize(size, size)
     #
-    #     for i, cTweet in enumerate(tweetsCopy):
-    #         #distance[size - 1][i] = semantic(cTweet["syncset"], current["syncset"])
-    #         distance[size - 1][i] = jaccard(cTweet["keywords"], current["keywords"])
+    #     for i, ctext in enumerate(textsCopy):
+    #         #distance[size - 1][i] = semantic(ctext["syncset"], current["syncset"])
+    #         distance[size - 1][i] = jaccard(ctext["keywords"], current["keywords"])
     #         distance[i][size - 1] = distance[size - 1][i]
     #
     #     distance[size - 1][size - 1] = 0
@@ -346,14 +396,13 @@ def layoutGenerationProgressive(data, client):
 
     if (layoutPacketCounter % chunkSize == 0 and layoutPacketCounter >= chunkSize) \
             or layoutPacketCounter == totalLines - 1:
-        # tfidf = TfidfVectorizer().fit_transform(tweetsCopy)
+        # tfidf = TfidfVectorizer().fit_transform(textsCopy)
         # similarities = linear_kernel(tfidf, tfidf)
 
         # number of iterations based on input from the client
         model = TSNE(n_components=2, init='pca', random_state=1, method='barnes_hut', n_iter=200, verbose=2)
 
-        distance = np.copy(distance2[0:layoutPacketCounter+1, 0:layoutPacketCounter+1])
-        spatialData = model.fit_transform(distance)
+        spatialData = model.fit_transform(np.copy(distancetexts[0:layoutPacketCounter + 1, 0:layoutPacketCounter + 1]))
         spatialLayout = spatialData.tolist()
 
         # ## first time
@@ -434,14 +483,14 @@ def layoutGenerationProgressive(data, client):
 def topicModellingProgressive(data, client):
     global layoutStop
 
-    tweet = data["content"]
+    text = data["content"]
     chunkSize = data["chunkSize"]
     cache = []
     counter = 0
     colnames = ""
     chunkCounter = 0
 
-    cache.append(tweet)
+    cache.append(text)
     counter = counter + 1
 
     if counter % chunkSize == 1 and counter >= chunkSize:
@@ -483,22 +532,22 @@ def handleEvent(client, event, message):
     if event == "request layout":
         future = thread_pool.submit(layoutGenerationProgressive, message, client)
 
-    if event == "request tweets":
+    if event == "request texts":
         ids = message["content"]
-        returnTweets = []
+        returntexts = []
 
         for points in layoutCache[ids["row"]][ids["col"]]["points"]:
-            returnTweets.append(contentCache[points["id"]])
+            returntexts.append(contentCache[points["id"]])
 
         message = {}
         message["id"] = 1
-        message["content"] = returnTweets
+        message["content"] = returntexts
         message["absolute-progress"] = {
             "current": 100,
             "total": 100,
-            "relative": len(returnTweets)
+            "relative": len(returntexts)
         }
-        client.send_message("tweets content", message)
+        client.send_message("texts content", message)
 
     if event == "request keywords":
         ids = message["content"]

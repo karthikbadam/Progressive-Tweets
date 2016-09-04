@@ -190,29 +190,26 @@ def readFileProgressive(data, client):
                 for i, value in enumerate(values):
                     textDatum[colnames[i]] = unicode(value, errors='ignore')
 
-                cache.append({"content": textDatum[textContentCol],
-                              "sentiment": textDatum[sentimentCol],
-                              "author": textDatum[authorNameCol],
-                              "textId": textDatum["id"],
-                              "id": counter - 1})
-
                 textDatumOut = {}
                 textDatumOut["id"] = lineNumber - 1
                 textSentimentVader = vaderSentiment(textDatum[textContentCol])
                 # {'neg': 0.0, 'neu': 0.254, 'pos': 0.746, 'compound': 0.8316}
 
-                maxSentiment = "neutral"
-                max = 0
-                for key in textSentimentVader.keys():
-                    if textSentimentVader[key] > max:
-                        max = textSentimentVader[key]
-                        maxSentiment = "Positive" if key is "pos" else "Negative" if key is "neg" else "Neutral"
-
-                textDatumOut["sentiment"] = maxSentiment
+                textDatumOut["sentiment"] = "Positive" if textSentimentVader["compound"] > 0.25 else "Negative" if textSentimentVader["compound"] < -0.25 else "Neutral"
                 textDatumOut["content"] = textDatum[textContentCol]
                 textDatumOut["author"] = textDatum[authorNameCol]
                 textDatumOut["textId"] = textDatum["id"]
                 textDatumOut["keywords"] = tokenizetexts({"content": textDatum[textContentCol]})
+
+                if len(contentCache) < lineNumber:
+                    contentCache.append(textDatumOut)
+
+                cache.append({"content": textDatumOut["content"],
+                              "sentiment": textDatumOut["sentiment"],
+                              "author": textDatumOut["author"],
+                              "textId": textDatumOut["textId"],
+                              "id": counter - 1})
+
                 counter = counter + 1
 
                 # textDatumOut["syncset"] = []
@@ -237,8 +234,7 @@ def readFileProgressive(data, client):
                         distancetexts[i][lineNumber - 1] = distancetexts[lineNumber - 1][i]
                     distancetexts[lineNumber - 1][lineNumber - 1] = 0
 
-                if len(contentCache) < lineNumber:
-                    contentCache.append(textDatumOut)
+
 
                 if counter % chunkSize == 1 and counter >= chunkSize:
                     chunkCounter = chunkCounter + 1

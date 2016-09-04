@@ -50,7 +50,7 @@ var Feedback = {
         _self.progressColorScale = d3.scaleLinear()
             .domain(d3.extent(_self.progressHistories, function (p) {
                 return p["relative"];
-            })).range(["#fff7fb", "#045a8d"]);
+            })).range(["#c6dbef", "#08306b"]);
 
         _self.pWidth = _self.progressWidth / progress["total"] < 1 ? 1 : _self.progressWidth / progress["total"];
 

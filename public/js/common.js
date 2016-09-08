@@ -28,6 +28,31 @@ var Feedback = {
             .attr("id", "temperature-gradient")
             .attr("gradientUnits", "objectBoundingBox");
 
+        _self.progressDrag = d3.drag()
+            .on("start", dragstarted)
+            .on("drag", dragged)
+            .on("end", dragended);
+
+        function dragstarted(d) {
+            d3.event.sourceEvent.stopPropagation();
+            d3.select(this).classed("dragging", true);
+        }
+
+        function dragged(d) {
+            d3.select(this).attr("x", d3.event.x - 10);
+            _self.playHead.attr("x", d3.event.x);
+        }
+
+        function dragended(d) {
+            d3.select(this).classed("dragging", false);
+            d3.select(this).attr("x", d3.event.x - 10);
+            _self.playHead.attr("x", d3.event.x);
+
+            var playHeadIndex = Math.round(d3.event.x * _self.currentProgress["total"] / _self.currentProgress["current"]);
+
+            console.log(playHeadIndex);
+        }
+
         _self.tweetContentDiv = d3.select('#' + divID).append("div")
             .attr("id", "content" + divID)
             .style("background-color", "white")
@@ -45,7 +70,13 @@ var Feedback = {
     updateProgressBar: function (context, progress) {
         var _self = context;
 
+        if (progress == null) {
+            return;
+        }
+
         _self.progressHistories.push(progress);
+
+        _self.currentProgress = progress;
 
         _self.progressColorScale = d3.scaleLinear()
             .domain(d3.extent(_self.progressHistories, function (p) {
@@ -99,26 +130,33 @@ var Feedback = {
                     return 0.5;
                 });
 
-            _self.progressCurrentSvg.append("rect")
+            _self.playHead = _self.progressCurrentSvg.append("rect")
                 .attr("class", "playhead")
                 .attr("x", 0)
                 .attr("y", 0)
-                .attr("width", 5)
+                .attr("width", 1)
+                .attr("stroke-width", 0)
                 .attr("height", _self.progressHeight)
+                .style("pointer-events", "none")
                 .style("fill", "black")
+                .style("fill-opacity", 1);
+
+            _self.playHeadShadow = _self.progressCurrentSvg.append("rect")
+                .attr("class", "playheadshadow")
+                .attr("x", 0)
+                .attr("y", 0)
+                .attr("width", 20)
+                .attr("height", _self.progressHeight)
+                .style("fill", "transparent")
                 .style("fill-opacity", 1)
-                .on("start", function (d) {
-
-                })
-                .on("move", function (d) {
-
-                })
-                .on("end", function (d) {
-
-                });
+                .style("cursor", "hand")
+                .call(_self.progressDrag)
         }
 
-        _self.progressCurrentSvg.select(".playhead")
+        _self.playHeadShadow
+            .attr("x", _self.progressWidth * (progress["current"]) / progress["total"] - 10);
+
+        _self.playHead
             .attr("x", _self.progressWidth * (progress["current"]) / progress["total"]);
 
         var progressAnnotations = _self.progressCurrentSvg.selectAll(".annotation")
@@ -143,6 +181,7 @@ var Feedback = {
             .attr("fill", function (d, i) {
                 return "#222";
             })
+            .style("pointer-events", "none")
             .attr("font-size", "9px")
             .text(function (d, i) {
                 return d;
@@ -168,6 +207,7 @@ var Feedback = {
                 return "#222";
             })
             .attr("font-size", "9px")
+            .style("pointer-events", "none")
             .text(function (d, i) {
                 return d;
             })

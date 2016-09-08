@@ -38,8 +38,6 @@ logging.basicConfig(format='%(levelname)s:%(message)s', level=logging.DEBUG)
 logger = logging.getLogger(__name__)
 
 ## Global variables
-renderStop = False
-layoutStop = False
 pauseInterface = False
 revertInterface = False
 stopInterface = False
@@ -51,9 +49,8 @@ totalLines = 1
 bin2DRows = 80
 bin2DCols = 40
 
-distancetexts = np.zeros([1, 1])
+distanceTexts = np.zeros([1, 1])
 
-# thread_pool = ProcessPoolExecutor(100)
 thread_pool = ThreadPoolExecutor(200)
 
 ## -------------------------------------------------------------------
@@ -64,7 +61,6 @@ wordnetLemmatizer = WordNetLemmatizer()
 sentimentCol = "sentiment"
 authorNameCol = "name"
 textContentCol = "text"
-
 
 
 # # Columns in the text dataset -- general dataset
@@ -117,21 +113,6 @@ def generateKeywords(text):
             else:
                 currentDoc.append(temp[word][0].lower())
 
-    # bigrams = ngrams(nltk.word_tokenize(text.lower().strip()), 2)
-    # bigrams = list(ngrams(currentDoc, 2))
-
-    # newDoc = []
-    # for bigram in bigrams:
-    #     newDoc.append(bigram[0] + " " + bigram[1])
-    #     currentDoc.append(bigram[0] + " " + bigram[1])
-
-    # bigrams = ngrams(nltk.word_tokenize(text.lower().strip()), 2)
-    # trigrams = list(ngrams(currentDoc, 3))
-    #
-    # for trigram in trigrams:
-    #     newDoc.append(trigram[0] + " " + trigram[1] + " " + trigram[2])
-    #     currentDoc.append(trigram[0] + " " + trigram[1] + " " + trigram[2])
-
     return currentDoc
 
 
@@ -165,7 +146,6 @@ def analyzeTopic():
 ## Currently for csv files or tsv files
 @gen.coroutine
 def readFileProgressive(data, client):
-    global renderStop
     global totalLines
     filename = data["content"]
     chunkSize = data["chunkSize"]
@@ -218,10 +198,13 @@ def readFileProgressive(data, client):
                         }
 
                         client.send_message("file content", message)
+                        client.send_message("sentiment content", message)
+                        client.send_message("user content", message)
 
                         cache2 = []
                         chunkBytes2 = 0
 
+                    time.sleep(0.005)
                     playHead += 1
                 ## -------------------------------------
 
@@ -247,10 +230,13 @@ def readFileProgressive(data, client):
                         }
 
                         client.send_message("file content", message)
+                        client.send_message("sentiment content", message)
+                        client.send_message("user content", message)
 
                         cache2 = []
                         chunkBytes2 = 0
 
+                    time.sleep(0.005)
                     playHead += 1
                 ## -------------------------------------
 
@@ -276,18 +262,21 @@ def readFileProgressive(data, client):
                         }
 
                         client.send_message("file content", message)
+                        client.send_message("sentiment content", message)
+                        client.send_message("user content", message)
 
                         cache2 = []
                         chunkBytes2 = 0
 
+                    time.sleep(0.005)
                     playHead += 1
                 ## -------------------------------------
 
                 ## -------------------------------------
                 ## For when the stop operation is selected
-                if stopInterface == True:
-                    stopInterface = False
+                while stopInterface == True:
                     playHead = 1
+
                 ## -------------------------------------
 
                 bytesRead = bytesRead + len(line)
@@ -325,16 +314,16 @@ def readFileProgressive(data, client):
 
                 # compute distance2
                 if lineNumber == 1:
-                    distancetexts[0][0] = 0
+                    distanceTexts[0][0] = 0
                 else:
-                    if lineNumber > distancetexts.shape[0]:
-                        distancetexts.resize(totalLines, totalLines)
+                    if lineNumber > distanceTexts.shape[0]:
+                        distanceTexts.resize(totalLines, totalLines)
                     for i, ctext in enumerate(contentCache):
                         # distance2[lineNumber - 1][i] = jaccard(ctext["keywords"], textDatumOut["keywords"])
                         # distance2[lineNumber - 1][i] = semantic(ctext["syncset"], textDatumOut["syncset"])
-                        distancetexts[lineNumber - 1][i] = semantic(ctext["keywords"], textDatumOut["keywords"])
-                        distancetexts[i][lineNumber - 1] = distancetexts[lineNumber - 1][i]
-                    distancetexts[lineNumber - 1][lineNumber - 1] = 0
+                        distanceTexts[lineNumber - 1][i] = semantic(ctext["keywords"], textDatumOut["keywords"])
+                        distanceTexts[i][lineNumber - 1] = distanceTexts[lineNumber - 1][i]
+                    distanceTexts[lineNumber - 1][lineNumber - 1] = 0
 
                 if counter % chunkSize == 1 and counter >= chunkSize:
                     chunkCounter = chunkCounter + 1
@@ -348,10 +337,10 @@ def readFileProgressive(data, client):
                         "relative": chunkBytes
                     }
 
-                    if renderStop:
-                        break
 
                     client.send_message("file content", message)
+                    client.send_message("sentiment content", message)
+                    client.send_message("user content", message)
 
                     cache = []
                     counter = 1
@@ -398,30 +387,6 @@ wordToSet = {}
 def semantic(allsyns1, allsyns2):
     global wordToSet
     sum = 0.0
-    count = 0.0
-
-    # print(allsyns2)
-    # for s1 in allsyns1:
-    #     for s2 in allsyns2:
-    #         score = s1.wup_similarity(s2)
-    #         if score is None:
-    #             score = 0
-    #         sum = sum + score
-    #         count += 1
-    #
-    # if count == 0:
-    #     count = 1
-    #
-
-
-    # number of common elements between two arrays
-    # sum = len(list(set(allsyns1) & set(allsyns2))) + 0.0
-    # count = len(list(set(allsyns1))) + len(list(set(allsyns2))) - sum + 0.0
-    # if count == 0.0:
-    #     count = 1.0
-    #
-    # similarity = sum / count
-    #
 
     for s1 in allsyns1:
         if s1 not in wordToSet:
@@ -448,45 +413,12 @@ def semantic(allsyns1, allsyns2):
 
     return count - 2 * sum
 
-    # if count == 0.0:
-    #    count = 1.0
-
-    # similarity = 2 * sum / count
-
-    # print str(sum) + " " + str(count) + " " + str(similarity)
-
-    # return (1.0 - similarity) * count
-
-    # if len(allsyns1) > 0 and len(allsyns2) > 0:
-    #     score = allsyns1[0].wup_similarity(allsyns2[0])
-    #     if score is None:
-    #         score = 0
-    #     return 1 - score
-    #
-    # return 1
-
-
 def layoutGenerationProgressive(data, client):
     global layoutCache
     global contentCache
 
     chunkSize = data["chunkSize"]
-    size = data["content"] + 1
-
-    # chunkSize, textsCopy, current = slicetexts(data)
-    # if size == 1:
-    #     distance[0][0] = 0
-    # else:
-    #     distance.resize(size, size)
-    #
-    #     for i, ctext in enumerate(textsCopy):
-    #         #distance[size - 1][i] = semantic(ctext["syncset"], current["syncset"])
-    #         distance[size - 1][i] = jaccard(ctext["keywords"], current["keywords"])
-    #         distance[i][size - 1] = distance[size - 1][i]
-    #
-    #     distance[size - 1][size - 1] = 0
-
-    layoutPacketCounter = size
+    layoutPacketCounter = data["content"] + 1
 
     print "total lines is ----------------------------------------------------------- " + str(
         layoutPacketCounter) + " -- " + str(totalLines)
@@ -497,12 +429,10 @@ def layoutGenerationProgressive(data, client):
         # tfidf = TfidfVectorizer().fit_transform(textsCopy)
         # similarities = linear_kernel(tfidf, tfidf)
 
-        # number of iterations based on input from the client
-        # model = MDS(n_components=2, n_init=1, max_iter=100, verbose=2, dissimilarity="precomputed")
-
-        distance = np.copy(distancetexts[0:layoutPacketCounter, 0:layoutPacketCounter])
+        distance = np.copy(distanceTexts[0:layoutPacketCounter, 0:layoutPacketCounter])
 
         approximate = "pca"
+
         ## if not the first time
         if layoutPacketCounter > chunkSize:
             approximate = np.zeros([layoutPacketCounter, 2])
@@ -522,6 +452,8 @@ def layoutGenerationProgressive(data, client):
                     approximate[i][0] = random.random()
                     approximate[i][1] = random.random()
 
+        # number of iterations based on input from the client
+        # model = MDS(n_components=2, n_init=1, max_iter=100, verbose=2, dissimilarity="precomputed")
         model = TSNE(n_components=2, init=approximate, random_state=1, method='barnes_hut', n_iter=200, verbose=2)
         spatialData = model.fit_transform(distance)
         spatialLayout = spatialData.tolist()
@@ -596,8 +528,6 @@ def layoutGenerationProgressive(data, client):
 
 ## Progressive topic modeling
 def topicModellingProgressive(data, client):
-    global layoutStop
-
     text = data["content"]
     chunkSize = data["chunkSize"]
     cache = []
@@ -698,7 +628,6 @@ def handleEvent(client, event, message):
 
 
 class SocketHandler(tornado.websocket.WebSocketHandler):
-
     def open(self):
         logger.info("Connection opened")
 

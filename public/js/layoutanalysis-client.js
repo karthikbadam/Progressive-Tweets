@@ -143,7 +143,15 @@ $(document).ready(function () {
 
         list.draw(cache);
 
+    });
+
+    registerHandlers("sentiment content", function (cache) {
+
         sentimentBar.draw(cache);
+
+    });
+
+    registerHandlers("user content", function (cache) {
 
         userBar.draw(cache);
 

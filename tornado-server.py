@@ -18,6 +18,7 @@ import numpy as np
 from tornado.ioloop import IOLoop
 
 from sklearn.manifold import TSNE
+from sklearn.manifold import MDS
 from sklearn.feature_extraction.text import TfidfVectorizer
 from sklearn.metrics.pairwise import linear_kernel
 import re, nltk, json
@@ -39,11 +40,15 @@ logger = logging.getLogger(__name__)
 ## Global variables
 renderStop = False
 layoutStop = False
+pauseInterface = False
+revertInterface = False
+stopInterface = False
+
 contentCache = []
 layoutCache = []
 totalLines = 1
 
-bin2DRows = 40
+bin2DRows = 80
 bin2DCols = 40
 
 distancetexts = np.zeros([1, 1])
@@ -59,6 +64,8 @@ wordnetLemmatizer = WordNetLemmatizer()
 sentimentCol = "sentiment"
 authorNameCol = "name"
 textContentCol = "text"
+
+
 
 # # Columns in the text dataset -- general dataset
 # sentimentCol = "rating.1"
@@ -84,7 +91,8 @@ def tokenize(text):
 
 
 stopset = stopwords.words('english')
-freq_words = ['http', 'https', 'amp', 'com', 'co', 'th', 'textdebate', 'debate', 'mccain', 'obama', 'gopdebate', 'gopdebates', 'rt']
+freq_words = ['http', 'https', 'amp', 'com', 'co', 'th', 'textdebate', 'debate', 'mccain', 'obama', 'gopdebate',
+              'gopdebates', 'rt']
 for i in freq_words:
     stopset.append(i)
 
@@ -172,6 +180,10 @@ def readFileProgressive(data, client):
     lineNumber = 1
     chunkBytes = 0.0
 
+    ## Line index of the last element in the current chunk
+    ## This is controlled by the client
+    playHead = 1
+
     with open("public/data/" + filename, 'r') as infile:
         for line in infile:
             if counter == 0:
@@ -180,6 +192,103 @@ def readFileProgressive(data, client):
                 counter = 1
             else:
                 textDatum = {}
+
+                while pauseInterface:
+                    logger.info("system paused")
+
+                ## -------------------------------------
+                ## For when the play head is changed
+                counter2 = 0
+                chunkCounter2 = 0
+                cache2 = []
+                chunkBytes2 = 0
+                while playHead < lineNumber:
+                    cache2.append(contentCache[playHead - 1])
+                    chunkBytes2 += contentCache[playHead - 1]["bytes"]
+                    if counter2 % chunkSize == 1 and counter2 >= chunkSize:
+                        chunkCounter2 += 1
+
+                        message = {}
+                        message["id"] = chunkCounter2
+                        message["content"] = cache2
+                        message["absolute-progress"] = {
+                            "current": playHead,
+                            "total": totalLines,
+                            "relative": chunkBytes2
+                        }
+
+                        client.send_message("file content", message)
+
+                        cache2 = []
+                        chunkBytes2 = 0
+
+                    playHead += 1
+                ## -------------------------------------
+
+                ## -------------------------------------
+                ## For when the revert operation is selected
+                counter2 = 0
+                chunkCounter2 = 0
+                cache2 = []
+                chunkBytes2 = 0
+                while playHead > 0 and revertInterface:
+                    cache2.append(contentCache[playHead - 1])
+                    chunkBytes2 += contentCache[playHead - 1]["bytes"]
+                    if counter2 % chunkSize == 1 and counter2 >= chunkSize:
+                        chunkCounter2 += 1
+
+                        message = {}
+                        message["id"] = chunkCounter2
+                        message["content"] = cache2
+                        message["absolute-progress"] = {
+                            "current": playHead,
+                            "total": totalLines,
+                            "relative": chunkBytes2
+                        }
+
+                        client.send_message("file content", message)
+
+                        cache2 = []
+                        chunkBytes2 = 0
+
+                    playHead += 1
+                ## -------------------------------------
+
+                ## -------------------------------------
+                ## For when the forward operation is selected
+                counter2 = 0
+                chunkCounter2 = 0
+                cache2 = []
+                chunkBytes2 = 0
+                while playHead < lineNumber:
+                    cache2.append(contentCache[playHead - 1])
+                    chunkBytes2 += contentCache[playHead - 1]["bytes"]
+                    if counter2 % chunkSize == 1 and counter2 >= chunkSize:
+                        chunkCounter2 += 1
+
+                        message = {}
+                        message["id"] = chunkCounter2
+                        message["content"] = cache2
+                        message["absolute-progress"] = {
+                            "current": playHead,
+                            "total": totalLines,
+                            "relative": chunkBytes2
+                        }
+
+                        client.send_message("file content", message)
+
+                        cache2 = []
+                        chunkBytes2 = 0
+
+                    playHead += 1
+                ## -------------------------------------
+
+                ## -------------------------------------
+                ## For when the stop operation is selected
+                if stopInterface == True:
+                    stopInterface = False
+                    playHead = 1
+                ## -------------------------------------
 
                 bytesRead = bytesRead + len(line)
                 linesRead = lineNumber
@@ -195,11 +304,13 @@ def readFileProgressive(data, client):
                 textSentimentVader = vaderSentiment(textDatum[textContentCol])
                 # {'neg': 0.0, 'neu': 0.254, 'pos': 0.746, 'compound': 0.8316}
 
-                textDatumOut["sentiment"] = "Positive" if textSentimentVader["compound"] > 0.25 else "Negative" if textSentimentVader["compound"] < -0.25 else "Neutral"
+                textDatumOut["sentiment"] = "Positive" if textSentimentVader["compound"] > 0.25 else "Negative" if \
+                    textSentimentVader["compound"] < -0.25 else "Neutral"
                 textDatumOut["content"] = textDatum[textContentCol]
                 textDatumOut["author"] = textDatum[authorNameCol]
                 textDatumOut["textId"] = textDatum["id"]
                 textDatumOut["keywords"] = tokenizetexts({"content": textDatum[textContentCol]})
+                textDatumOut["bytes"] = len(line)
 
                 if len(contentCache) < lineNumber:
                     contentCache.append(textDatumOut)
@@ -211,15 +322,6 @@ def readFileProgressive(data, client):
                               "id": counter - 1})
 
                 counter = counter + 1
-
-                # textDatumOut["syncset"] = []
-                # for word in textDatumOut["keywords"]:
-                #     syncset = wordnet.synsets(word)
-                #     textDatumOut["syncset"].append(word)
-                #     for ss in syncset:
-                #         textDatumOut["syncset"].append(ss.name().split(".")[0])
-
-                # textDatumOut["syncset"] = set(textDatumOut["syncset"])
 
                 # compute distance2
                 if lineNumber == 1:
@@ -233,8 +335,6 @@ def readFileProgressive(data, client):
                         distancetexts[lineNumber - 1][i] = semantic(ctext["keywords"], textDatumOut["keywords"])
                         distancetexts[i][lineNumber - 1] = distancetexts[lineNumber - 1][i]
                     distancetexts[lineNumber - 1][lineNumber - 1] = 0
-
-
 
                 if counter % chunkSize == 1 and counter >= chunkSize:
                     chunkCounter = chunkCounter + 1
@@ -257,9 +357,10 @@ def readFileProgressive(data, client):
                     counter = 1
                     chunkBytes = 0
 
-                time.sleep(0.01)
+                time.sleep(0.05)
 
                 lineNumber += 1
+                playHead += 1
 
     totalLines = linesRead
 
@@ -292,6 +393,7 @@ def jaccard(list1, list2):
 
 
 wordToSet = {}
+
 
 def semantic(allsyns1, allsyns2):
     global wordToSet
@@ -344,18 +446,16 @@ def semantic(allsyns1, allsyns2):
 
     count = len(list(set(allsyns1))) + len(list(set(allsyns2))) + 0.0
 
-    #print (count - 2* sum)
-
     return count - 2 * sum
 
-    #if count == 0.0:
+    # if count == 0.0:
     #    count = 1.0
 
     # similarity = 2 * sum / count
 
-    #print str(sum) + " " + str(count) + " " + str(similarity)
+    # print str(sum) + " " + str(count) + " " + str(similarity)
 
-    #return (1.0 - similarity) * count
+    # return (1.0 - similarity) * count
 
     # if len(allsyns1) > 0 and len(allsyns2) > 0:
     #     score = allsyns1[0].wup_similarity(allsyns2[0])
@@ -368,6 +468,7 @@ def semantic(allsyns1, allsyns2):
 
 def layoutGenerationProgressive(data, client):
     global layoutCache
+    global contentCache
 
     chunkSize = data["chunkSize"]
     size = data["content"] + 1
@@ -392,20 +493,41 @@ def layoutGenerationProgressive(data, client):
 
     if (layoutPacketCounter % chunkSize == 0 and layoutPacketCounter >= chunkSize) \
             or layoutPacketCounter == totalLines - 1:
+
         # tfidf = TfidfVectorizer().fit_transform(textsCopy)
         # similarities = linear_kernel(tfidf, tfidf)
 
         # number of iterations based on input from the client
-        model = TSNE(n_components=2, init='pca', random_state=1, method='barnes_hut', n_iter=200, verbose=2)
+        # model = MDS(n_components=2, n_init=1, max_iter=100, verbose=2, dissimilarity="precomputed")
 
-        spatialData = model.fit_transform(np.copy(distancetexts[0:layoutPacketCounter + 1, 0:layoutPacketCounter + 1]))
+        distance = np.copy(distancetexts[0:layoutPacketCounter, 0:layoutPacketCounter])
+
+        approximate = "pca"
+        ## if not the first time
+        if layoutPacketCounter > chunkSize:
+            approximate = np.zeros([layoutPacketCounter, 2])
+            for i in range(0, layoutPacketCounter):
+                if "location" in contentCache[i].keys():
+                    approximate[i][0] = contentCache[i]["location"][0]
+                    approximate[i][1] = contentCache[i]["location"][1]
+                else:
+                    # minDistanceIndex = 0
+                    # minDistance = 100000
+                    # for j in range(0, i):
+                    #     if distance[i][j] < minDistance and "location" in contentCache[j].keys():
+                    #         minDistanceIndex = j
+                    #         minDistance = distance[i][j]
+                    # approximate[i][0] = contentCache[minDistanceIndex]["location"][0]
+                    # approximate[i][1] = contentCache[minDistanceIndex]["location"][1]
+                    approximate[i][0] = random.random()
+                    approximate[i][1] = random.random()
+
+        model = TSNE(n_components=2, init=approximate, random_state=1, method='barnes_hut', n_iter=200, verbose=2)
+        spatialData = model.fit_transform(distance)
         spatialLayout = spatialData.tolist()
 
-        # ## first time
-        # if layoutPacketCounter <= chunkSize:
-        #     spatialData = model.fit_transform(np.copy(distance))
-        #     spatialLayout = spatialData.tolist()
-        # else:
+        while pauseInterface:
+            logger.info("system paused")
 
         layouts = []
 
@@ -447,10 +569,6 @@ def layoutGenerationProgressive(data, client):
                 "content": l
             })
             contentCache[i]["location"] = l
-            # datum = {}
-            # datum["id"] = i
-            # datum["content"] = l
-            # layouts.append(datum)
 
         # flatten the layout matrix
         for i in range(0, bin2DRows):
@@ -470,8 +588,9 @@ def layoutGenerationProgressive(data, client):
         returnData["absolute-progress"] = {
             "current": layoutPacketCounter,
             "total": totalLines,
-            "relative": model.kl_divergence_
+            "relative": model.rel_measure
         }
+
         client.send_message('spatial content', returnData)
 
 
@@ -521,6 +640,8 @@ def keywordDistribution(message):
 
 @gen.coroutine
 def handleEvent(client, event, message):
+    global pauseInterface
+
     logger.info("event " + str(event))
     if event == "request file":
         future = thread_pool.submit(readFileProgressive, message, client)
@@ -532,8 +653,9 @@ def handleEvent(client, event, message):
         ids = message["content"]
         returntexts = []
 
-        for points in layoutCache[ids["row"]][ids["col"]]["points"]:
-            returntexts.append(contentCache[points["id"]])
+        for cell in ids:
+            for points in layoutCache[cell["row"]][cell["col"]]["points"]:
+                returntexts.append(contentCache[points["id"]])
 
         message = {}
         message["id"] = 1
@@ -549,8 +671,10 @@ def handleEvent(client, event, message):
         ids = message["content"]
         returnKeywords = []
 
-        for points in layoutCache[ids["row"]][ids["col"]]["points"]:
-            returnKeywords.extend(contentCache[points["id"]]["keywords"])
+        for cell in ids:
+            for point in layoutCache[cell["row"]][cell["col"]]["points"]:
+                for keyword in contentCache[point["id"]]["keywords"]:
+                    returnKeywords.append({"keyword": keyword, "sentiment": contentCache[point["id"]]["sentiment"]})
 
         ## ids has row and col
         # for index in ids:
@@ -566,9 +690,15 @@ def handleEvent(client, event, message):
         }
         client.send_message("keyword content", message)
 
+    if event == "pause interface":
+        if pauseInterface:
+            pauseInterface = False
+        else:
+            pauseInterface = True
+
 
 class SocketHandler(tornado.websocket.WebSocketHandler):
-    # other methods
+
     def open(self):
         logger.info("Connection opened")
 

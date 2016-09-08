@@ -9,19 +9,15 @@ var dataFile = "republican_debate2016.txt";
 
 var sentimentBar, userBar, textScatter, list = null;
 
-var emotions = ["negative", "positive", "mixed", "other"];
+var commonButtons = null;
 
-if (dataFile == "republican_debate2016.txt") {
-
-    emotions = ["Negative", "Positive", "Neutral"];
-
-}
+var emotions = ["Negative",  "Neutral", "Positive"];
 
 var emotionValues = new Array(emotions.length);
 
 var popularUsers = d3.map();
 
-var colors = ["244,109,67", "166,217,106", "254,196,79", "77,77,77"];
+var colors = ["244,109,67", "254,196,79", "166,217,106", "77,77,77"];
 
 var sentiments = [];
 
@@ -52,7 +48,7 @@ $(document).ready(function () {
 
     socket.onopen = function () {
         socket.send(wrapMessage("js-client", "Hello"));
-        socket.send(wrapMessage("request file", {content: dataFile, chunkSize: 10}));
+        socket.send(wrapMessage("request file", {content: dataFile, chunkSize: 5}));
     };
 
     socket.onmessage = function (message) {
@@ -108,9 +104,7 @@ $(document).ready(function () {
     registerHandlers("spatial content", function (cache) {
 
         if (textScatter == null) {
-
             textScatter = new Heatmap({});
-
         }
 
         textScatter.draw(cache);
@@ -124,21 +118,22 @@ $(document).ready(function () {
         textScatter.drawKeywords(cache["content"]);
     });
 
-    registerHandlers("tweets content", function (cache) {
+    registerHandlers("texts content", function (cache) {
 
         console.log(cache);
-        textScatter.pause();
+        if (!commonButtons.pauseFlag) {
+            commonButtons.pause();
+        }
+
+        textScatter.drawKeywords(cache["content"], true);
 
         // process users into an array
-        userBar.pause();
         userBar.highlight(cache);
 
         // process sentiments into an array
-        sentimentBar.pause();
         sentimentBar.highlight(cache);
 
         // process tweets into an array
-        list.pause();
         list.highlight(cache);
 
 
@@ -166,6 +161,87 @@ $(document).ready(function () {
     userBar = new HorizontalBar();
 
 
+    // create common buttons
+    commonButtons = new  CommonButtons();
+
 });
 
+function CommonButtons() {
 
+    var _self = this;
+
+    d3.select("#common-buttons").style("float", "right").style("padding-top", "5px");
+
+    _self.pauseFlag = false;
+
+    _self.stopFlag = false;
+
+    Feedback.addControlMinimize("common-buttons", _self);
+
+    _self.miniControlDiv
+        .style("position", "relative")
+        .style("margin-left", "0px");
+}
+
+CommonButtons.prototype.pause = function () {
+
+    var _self = this;
+    _self.pauseFlag = !_self.pauseFlag;
+
+    socket.send(wrapMessage("pause interface", ""));
+
+    list.pause();
+    sentimentBar.pause();
+    userBar.pause();
+
+    if (textScatter != null)
+        textScatter.pause();
+
+    if (_self.pauseFlag) {
+        _self.miniControlDiv.select("#pause").style("background-image", 'url("/images/play.png")');
+    } else {
+        _self.miniControlDiv.select("#pause").style("background-image", 'url("/images/pause.png")');
+    }
+}
+
+CommonButtons.prototype.stop = function () {
+    var _self = this;
+    _self.stopFlag = !_self.stopFlag;
+
+    list.stop();
+    sentimentBar.stop();
+    userBar.stop();
+
+    if (textScatter != null)
+        textScatter.stop();
+
+
+    if (_self.stopFlag) {
+        _self.miniControlDiv.select("#stop").style("background-image", 'url("/images/play.png")');
+    } else {
+        _self.miniControlDiv.select("#stop").style("background-image", 'url("/images/stop.png")');
+    }
+}
+
+CommonButtons.prototype.forward = function () {
+    var _self = this;
+
+    list.forward();
+    sentimentBar.forward();
+    userBar.forward();
+
+    if (textScatter != null)
+        textScatter.forward();
+
+}
+
+CommonButtons.prototype.rewind = function () {
+    var _self = this;
+    list.rewind();
+    sentimentBar.rewind();
+    userBar.rewind();
+
+    if (textScatter != null)
+        textScatter.rewind();
+
+}

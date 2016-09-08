@@ -23,56 +23,10 @@ function Bar(options) {
 
     var contentDiv = Feedback.addProgressBar(parentDiv, _self);
 
-    var optionHandlers = _self.optionHandlers = {};
-
     _self.stopFlag = false;
     _self.pauseFlag = false;
 
-    optionHandlers["stop"] = function () {
-
-        if (_self.stopFlag == false) {
-
-            _self.stopFlag = true;
-
-        } else {
-
-            _self.stopFlag = false;
-
-        }
-
-    }
-
-    optionHandlers["pause"] = function () {
-
-        if (_self.pauseFlag == false) {
-
-            _self.pauseFlag = true;
-
-        } else {
-
-            _self.pauseFlag = false;
-
-        }
-
-    }
-
-    optionHandlers["play"] = function () {
-
-        _self.pauseFlag = false;
-        _self.stopFlag = false;
-
-    }
-
-    optionHandlers["rewind"] = function () {
-
-    }
-
-    optionHandlers["forward"] = function () {
-
-    }
-
-
-    Feedback.addControlMinimize(parentDiv, _self, optionHandlers);
+    Feedback.addControlMinimize(parentDiv, _self);
 
     var margin = {
             top: 15,
@@ -152,12 +106,32 @@ function Bar(options) {
 
 Bar.prototype.pause = function () {
     var _self = this;
-    _self.pauseFlag = true;
+    _self.pauseFlag = !_self.pauseFlag;
     if (_self.pauseFlag) {
         _self.miniControlDiv.select("#pause").style("background-image", 'url("/images/play.png")');
     } else {
         _self.miniControlDiv.select("#pause").style("background-image", 'url("/images/pause.png")');
     }
+}
+
+Bar.prototype.stop = function () {
+    var _self = this;
+    _self.stopFlag = !_self.stopFlag;
+    if (_self.stopFlag) {
+        _self.miniControlDiv.select("#stop").style("background-image", 'url("/images/play.png")');
+    } else {
+        _self.miniControlDiv.select("#stop").style("background-image", 'url("/images/stop.png")');
+    }
+}
+
+Bar.prototype.forward = function () {
+    var _self = this;
+
+}
+
+Bar.prototype.rewind = function () {
+    var _self = this;
+
 }
 
 
@@ -189,24 +163,15 @@ Bar.prototype.highlight = function (cache) {
         }
     });
 
-    console.log(_self.selectedEmotions);
-
     var max = d3.max(_self.selectedEmotions, function (d) {
         return d;
     });
 
     _self.y.domain([0, max]);
     _self.yAxis.ticks(max > 10 ? 10 : max);
-    _self.svg.select(".y.axis").transition().duration(100).call(_self.yAxis);
+    _self.svg.select(".y.axis").transition().duration(100).delay(500).call(_self.yAxis);
 
-    _self.bars.transition().duration(10)
-        .attr("x", function (d, i) {
-            return _self.x(_self.emotions[i]);
-        })
-        .attr("width", _self.x.bandwidth())
-        .attr("y", function (d) {
-            return _self.y(d);
-        })
+    _self.bars
         .attr("height", function (d) {
             return _self.height - _self.y(d);
         })
@@ -218,10 +183,10 @@ Bar.prototype.highlight = function (cache) {
         })
         .style("fill-opacity", 0.1);
 
-    var selectedEmotions = _self.selectedEmotions = _self.svg.selectAll(".selectedBar")
+    var selectedBars = _self.selectedBars = _self.svg.selectAll(".selectedBar")
         .data(_self.selectedEmotions);
 
-    _self.selectedEmotions
+    _self.selectedBars
         .enter()
         .append("rect")
         .attr("class", "selectedBar")
@@ -244,7 +209,7 @@ Bar.prototype.highlight = function (cache) {
         })
         .style("fill-opacity", 0.5);
 
-    _self.selectedEmotions
+    _self.selectedBars
         .transition().duration(10)
         .attr("x", function (d, i) {
             return _self.x(_self.emotions[i]);
@@ -264,7 +229,7 @@ Bar.prototype.highlight = function (cache) {
         })
         .style("fill-opacity", 0.5);
 
-    _self.selectedEmotions.exit().remove();
+    _self.selectedBars.exit().remove();
 }
 
 Bar.prototype.draw = function (cache) {
@@ -296,8 +261,8 @@ Bar.prototype.draw = function (cache) {
             Feedback.updateProgressBar(_self, progress);
         }
 
-        if (_self.selectedEmotions && !_self.selectedEmotions.empty()) {
-            _self.selectedEmotions.remove();
+        if (_self.svg.selectAll(".selectedBar")) {
+            _self.svg.selectAll(".selectedBar").remove();
         }
 
         var max = d3.max(_self.emotionValues, function (d) {
@@ -308,6 +273,9 @@ Bar.prototype.draw = function (cache) {
             _self.highest = 2 * max;
 
         }
+
+        _self.yAxis.ticks(max > 10 ? 10 : max);
+
         _self.y.domain([0, _self.highest]);
 
         _self.svg.select(".y.axis").call(_self.yAxis);

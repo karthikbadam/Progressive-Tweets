@@ -10,56 +10,10 @@ function Heatmap(options) {
 
     var contentDiv = _self.contentDiv = Feedback.addProgressBar(parentDiv, _self);
 
-    var optionHandlers = _self.optionHandlers = {};
-
     _self.stopFlag = false;
     _self.pauseFlag = false;
 
-    optionHandlers["stop"] = function () {
-
-        if (_self.stopFlag == false) {
-
-            _self.stopFlag = true;
-
-        } else {
-
-            _self.stopFlag = false;
-
-        }
-
-    }
-
-    optionHandlers["pause"] = function () {
-
-        if (_self.pauseFlag == false) {
-
-            _self.pauseFlag = true;
-
-        } else {
-
-            _self.pauseFlag = false;
-
-        }
-
-    }
-
-    optionHandlers["play"] = function () {
-
-        _self.pauseFlag = false;
-        _self.stopFlag = false;
-
-    }
-
-    optionHandlers["rewind"] = function () {
-
-    }
-
-    optionHandlers["forward"] = function () {
-
-    }
-
-
-    Feedback.addControlMinimize(parentDiv, _self, optionHandlers);
+    Feedback.addControlMinimize(parentDiv, _self);
 
     var margin = _self.margin = {
             top: 25,
@@ -74,85 +28,142 @@ function Heatmap(options) {
     _self.height = height;
 
     var svg = _self.svg = d3.select("#" + contentDiv).append("svg")
+        .attr("id", "heatmap")
         .attr("width", width + margin.left + margin.right)
         .attr("height", height + margin.top + margin.bottom)
         .append("g")
         .attr("transform", "translate(" + margin.left + "," + margin.top + ")");
 
-    // var x = _self.x = d3.scaleLinear()
-    //     .range([0, width]);
-    //
-    // var y = _self.y = d3.scaleLinear()
-    //     .range([height, 0]);
+    // Create the area where the lasso event can be triggered
+    var lasso_area = _self.svg.append("rect")
+        .attr("width", width)
+        .attr("height", height)
+        .style("opacity", 0);
+
+    var lasso_end = function () {
+
+        lasso.items().attr("fill", function (d, i) {
+            if (d["content"] == 0) {
+                return "white";
+            }
+            return _self.heatmapColorScale(d["content"]);
+
+        }).attr("stroke-width", 1).attr("stroke", "white");
+
+        var ids = [];
+
+        // Style the selected dots
+        lasso.items().filter(function (d) {
+            if (d.selected === true) {
+
+                var datum = {};
+
+                // collect the ids here
+                datum["row"] = d["row"];
+                datum["col"] = d["col"];
+
+                ids.push(datum);
+
+            }
+            return d.selected === true;
+        })
+            .attr("stroke-width", 10)
+            .attr("stroke", function (d, i) {
+                if (d["content"] == 0) {
+                    return "white";
+                }
+                return _self.heatmapColorScale(d["content"]);
+
+            });
+
+
+        // Reset the selection
+        lasso.items().each(function (d) {
+            d.selected = true;
+        })
+
+
+        if (ids.length > 0) {
+
+            var d = ids[ids.length - 1];
+
+            _self.rectWidth = _self.width / 5;
+            _self.rectHeight = _self.height / 5;
+
+            _self.rectLeft = d["col"] * (_self.width / _self.bin2DCols) + _self.rectWidth > _self.width ? d["col"] * (_self.width / _self.bin2DCols) - _self.rectWidth + _self.margin.left : d["col"] * (_self.width / _self.bin2DCols) + _self.margin.left;
+            _self.rectTop = d["row"] * (_self.height / _self.bin2DRows) + _self.rectHeight > _self.height ? d["row"] * (_self.height / _self.bin2DRows) - _self.rectHeight + _self.margin.top : d["row"] * (_self.height / _self.bin2DRows) + _self.margin.top;
+
+            socket.send(wrapMessage("request texts", {content: ids, chunkSize: 30}));
+
+        }
+    };
+
+    // Define the lasso
+    var lasso = _self.lasso = d3.lasso()
+        .svgParent("heatmap g")
+        .closePathDistance(75) // max distance for the lasso loop to be closed
+        .closePathSelect(true) // can items be selected by closing the path?
+        .hoverSelect(true) // can items by selected by hovering over them?
+        .area(lasso_area) // area where the lasso can be started
+        .on("end", lasso_end); // lasso end function
+
+    // Init the lasso on the svg:g that contains the dots
+    _self.svg.call(lasso);
 
     _self.data = null;
 
-    _self.bin2DRows = 40;
+    _self.bin2DRows = 80;
     _self.bin2DCols = 40;
 
     _self.heatmapColorScale = d3.scaleLinear()
         .range(["#deebf7", "#08306b"]);
 
-    // _self.brush = d3.brush()
-    //     .extent([[0, 0], [width, height]])
-    //     .on("end", function () {
-    //         if (d3.event.selection != null) {
-    //             var xSelection = [d3.event.selection[0][0], d3.event.selection[1][0]];
-    //             var ySelection = [d3.event.selection[0][1], d3.event.selection[1][1]];
-    //
-    //             _self.rectWidth = d3.event.selection[1][0] - d3.event.selection[0][0];
-    //             _self.rectHeight = d3.event.selection[1][1] - d3.event.selection[0][1];
-    //
-    //             _self.rectLeft = d3.event.selection[0][0] + _self.margin.left;
-    //             _self.rectTop = d3.event.selection[0][1] + _self.margin.top;
-    //
-    //             _self.rectRight = _self.rectLeft + _self.rectWidth;
-    //             _self.rectBottom = _self.rectTop + _self.rectHeight;
-    //
-    //             if (_self.data) {
-    //                 var ids = [];
-    //                 var brushed = _self.data.filter(function (d) {
-    //                     if (d["content"][0] >= xdomain[0] && d["content"][0] <= xdomain[1]) {
-    //                         if (d["content"][1] >= ydomain[0] && d["content"][1] <= ydomain[1]) {
-    //                             ids.push(+d["id"]);
-    //                             _self.svg.select("#l" + d["id"]).attr("r", 6);
-    //                             return true;
-    //                         } else {
-    //                             _self.svg.select("#l" + d["id"]).attr("r", 3);
-    //                             return false;
-    //                         }
-    //                     } else {
-    //                         _self.svg.select("#l" + d["id"]).attr("r", 3);
-    //                         return false;
-    //                     }
-    //                 });
-    //
-    //                 console.log(ids);
-    //
-    //
-    //                 //sending ids to the server
-    //                 socket.send(wrapMessage("request keywords", {content: ids, chunkSize: 30}));
-    //             }
-    //         }
-    //     });
-    //
-    // _self.svg.append("g")
-    //     .attr("class", "brush")
-    //     .call(_self.brush);
-
     _self.t = d3.transition()
-        .duration(200)
+        .duration(500)
+        .delay(1000)
         .ease(d3.easeLinear);
 }
 
 Heatmap.prototype.pause = function () {
     var _self = this;
-    _self.pauseFlag = true;
+    _self.pauseFlag = !_self.pauseFlag;
     if (_self.pauseFlag) {
         _self.miniControlDiv.select("#pause").style("background-image", 'url("/images/play.png")');
     } else {
         _self.miniControlDiv.select("#pause").style("background-image", 'url("/images/pause.png")');
+
+        _self.lasso.items().attr("fill", function (d, i) {
+            if (d["content"] == 0) {
+                return "white";
+            }
+            return _self.heatmapColorScale(d["content"]);
+
+        })
+            .attr("stroke-width", 1)
+            .attr("stroke", "white");
+
+        d3.select("#keywordDiv").remove();
     }
+}
+
+Heatmap.prototype.stop = function () {
+    var _self = this;
+    _self.stopFlag = !_self.stopFlag;
+    if (_self.stopFlag) {
+        _self.miniControlDiv.select("#stop").style("background-image", 'url("/images/play.png")');
+    } else {
+        _self.miniControlDiv.select("#stop").style("background-image", 'url("/images/stop.png")');
+    }
+}
+
+Heatmap.prototype.forward = function () {
+    var _self = this;
+
+}
+
+Heatmap.prototype.rewind = function () {
+    var _self = this;
+
 }
 
 Heatmap.prototype.draw = function (data) {
@@ -165,20 +176,71 @@ Heatmap.prototype.draw = function (data) {
 
     if (!_self.pauseFlag) {
 
-
         Feedback.updateProgressBar(_self, progress);
 
+        var domain = d3.extent(_self.data, function (p) {
+            if (p["content"] != 0) {
+                return p["content"];
+            }
+        });
+
         _self.heatmapColorScale
-            .domain(d3.extent(_self.data, function (p) {
-                if (p["content"] != 0) {
-                    return p["content"];
-                }
-            }));
+            .domain(domain);
+
+        var extent = domain[1] - domain[0];
+
+        // Add a legend for the color values.
+        var legend = _self.legend = _self.svg.selectAll(".legend")
+            .data(_self.heatmapColorScale.ticks(k = extent > 6 ? 6 : extent).reverse(), function (d, i) {
+                return i;
+            });
+
+        var newLegend = _self.legend.enter().append("g")
+            .attr("class", "legend")
+            .attr("transform", function (d, i) {
+                return "translate(" + (_self.width - 50) + "," + (20 + i * 20) + ")";
+            });
+
+        newLegend.append("rect")
+            .attr("width", 20)
+            .attr("height", 20)
+            .style("fill", function (d) {
+                return _self.heatmapColorScale(d);
+            });
+
+        newLegend.append("text")
+            .attr("x", 26)
+            .attr("y", 10)
+            .attr("dy", ".35em")
+            .text(function (d) {
+                return d;
+            });
+
+
+        _self.legend.select("rect").style("fill", function (d) {
+            return _self.heatmapColorScale(d);
+        });
+        _self.legend.select("text").text(function (d) {
+            return d;
+        });
+
+        _self.legend.exit().remove();
+
+        if (_self.svg.select(".label").empty()) {
+            _self.svg.append("text")
+                .attr("class", "label")
+                .attr("x", _self.width - 50)
+                .attr("y", 10)
+                .attr("dy", ".35em")
+                .text("#Tweets");
+        }
 
         // draw rectangles
         var rectangles = _self.rectangles = _self.svg
             .selectAll(".block")
-            .data(_self.data);
+            .data(_self.data, function (d) {
+                return "c" + d["col"] + "r" + d["row"];
+            });
 
         rectangles.enter()
             .append("rect")
@@ -198,7 +260,8 @@ Heatmap.prototype.draw = function (data) {
                 return _self.heatmapColorScale(d["content"]);
 
             })
-            .attr("stroke", "#fff")
+            .attr("stroke", "white")
+            .attr("stroke-width", 1)
             .attr("cell", function (d) {
                 return "r" + d.row + "c" + d.col;
             })
@@ -226,9 +289,16 @@ Heatmap.prototype.draw = function (data) {
                             return "white";
                         }
                         return _self.heatmapColorScale(d["content"]);
-                    });
+                    }).attr("stroke-width", 1).attr("stroke", "white");
 
-                d3.select(this).attr("fill", "#a63603");
+                d3.select(this).attr("stroke-width", 10)
+                    .attr("stroke", function (d, i) {
+                        if (d["content"] == 0) {
+                            return "white";
+                        }
+                        return _self.heatmapColorScale(d["content"]);
+
+                    });
 
                 _self.rectWidth = _self.width / 5;
                 _self.rectHeight = _self.height / 5;
@@ -236,7 +306,7 @@ Heatmap.prototype.draw = function (data) {
                 _self.rectLeft = d["col"] * (_self.width / _self.bin2DCols) + _self.rectWidth > _self.width ? d["col"] * (_self.width / _self.bin2DCols) - _self.rectWidth + _self.margin.left : d["col"] * (_self.width / _self.bin2DCols) + _self.margin.left;
                 _self.rectTop = d["row"] * (_self.height / _self.bin2DRows) + _self.rectHeight > _self.height ? d["row"] * (_self.height / _self.bin2DRows) - _self.rectHeight + _self.margin.top : d["row"] * (_self.height / _self.bin2DRows) + _self.margin.top;
 
-                socket.send(wrapMessage("request keywords", {content: datum, chunkSize: 30}));
+                socket.send(wrapMessage("request keywords", {content: [datum], chunkSize: 30}));
             })
             .on("click", function (d, i) {
 
@@ -251,9 +321,16 @@ Heatmap.prototype.draw = function (data) {
                             return "white";
                         }
                         return _self.heatmapColorScale(d["content"]);
-                    });
+                    }).attr("stroke-width", 1).attr("stroke", "white");
 
-                d3.select(this).attr("fill", "#a63603");
+                d3.select(this).attr("stroke-width", 10)
+                    .attr("stroke", function (d, i) {
+                        if (d["content"] == 0) {
+                            return "white";
+                        }
+                        return _self.heatmapColorScale(d["content"]);
+
+                    });
 
                 _self.rectWidth = _self.width / 5;
                 _self.rectHeight = _self.height / 5;
@@ -261,7 +338,7 @@ Heatmap.prototype.draw = function (data) {
                 _self.rectLeft = d["col"] * (_self.width / _self.bin2DCols) + _self.rectWidth > _self.width ? d["col"] * (_self.width / _self.bin2DCols) - _self.rectWidth + _self.margin.left : d["col"] * (_self.width / _self.bin2DCols) + _self.margin.left;
                 _self.rectTop = d["row"] * (_self.height / _self.bin2DRows) + _self.rectHeight > _self.height ? d["row"] * (_self.height / _self.bin2DRows) - _self.rectHeight + _self.margin.top : d["row"] * (_self.height / _self.bin2DRows) + _self.margin.top;
 
-                socket.send(wrapMessage("request tweets", {content: datum, chunkSize: 30}));
+                socket.send(wrapMessage("request texts", {content: [datum], chunkSize: 30}));
             });
 
 
@@ -283,16 +360,20 @@ Heatmap.prototype.draw = function (data) {
                 }
                 return _self.heatmapColorScale(d["content"]);
             })
-            .attr("stroke", "#fff")
+            .attr("stroke-width", 1)
             .attr("cell", function (d) {
                 return "r" + d.row + "c" + d.col;
             });
+
+
+        _self.lasso.items(_self.svg
+            .selectAll(".block"));
 
         if (_self.svg.selectAll("#title").empty()) {
             _self.svg.append("text")
                 .attr("id", "title")
                 .attr("x", _self.margin.left)
-                .attr("y", _self.height + _self.margin.top + 5)
+                .attr("y", _self.height + _self.margin.top - 5)
                 .attr("font-size", "14px")
                 .attr("fill", function (d, i) {
                     return "#222";
@@ -304,22 +385,43 @@ Heatmap.prototype.draw = function (data) {
     }
 }
 
-Heatmap.prototype.drawKeywords = function (allKeywords) {
+Heatmap.prototype.drawKeywords = function (allKeywords, fromSelection) {
 
     var _self = this;
 
+    if (fromSelection) {
+        var data = allKeywords;
+
+        allKeywords = [];
+
+        data.forEach(function (datum) {
+            datum["keywords"].forEach(function (keyword) {
+                allKeywords.push({"keyword": keyword, "sentiment": datum["sentiment"]});
+            })
+        })
+
+    }
+
     _self.popularKeywords = d3.map();
+    _self.keywordSentiments = {};
 
     // counting keywords
-    allKeywords.forEach(function (keyword) {
+    allKeywords.forEach(function (d) {
+
+        keyword = d["keyword"];
+        sentiment = emotions.indexOf(d["sentiment"]);
 
         if (_self.popularKeywords.has(keyword)) {
 
             _self.popularKeywords.set(keyword, _self.popularKeywords.get(keyword) + 1);
 
+            _self.keywordSentiments[keyword] += sentiment;
+
         } else {
 
             _self.popularKeywords.set(keyword, 1);
+
+            _self.keywordSentiments[keyword] = sentiment;
         }
 
     });
@@ -337,11 +439,11 @@ Heatmap.prototype.drawKeywords = function (allKeywords) {
         .style("left", _self.rectLeft + "px")
         .style("top", _self.rectTop + "px");
 
-    _self.keywordbar = new KeywordBar("keywordDiv", _self.popularKeywords, _self.width / 5, _self.height / 5);
+    _self.keywordbar = new KeywordBar("keywordDiv", _self.popularKeywords, _self.keywordSentiments, _self.width / 5, _self.height / 5);
 
 }
 
-function KeywordBar(parentDiv, data, rectWidth, rectHeight) {
+function KeywordBar(parentDiv, data, sentiments, rectWidth, rectHeight) {
 
     var _self = this;
 
@@ -404,12 +506,13 @@ function KeywordBar(parentDiv, data, rectWidth, rectHeight) {
             return _self.x(d.value);
         })
         .style("fill", function (d, i) {
-            return "#EEE";
+            return "rgb(" + colors[Math.round(sentiments[d.key] / d.value)] + ")";
         })
         .style("stroke", function (d, i) {
             return "#888";
         })
-        .style("fill-opacity", 0.8);
+        .style("fill-opacity", 0.5)
+        .attr("stroke-width", 1);
 
     selection.transition().duration(10)
         .attr("y", function (d, i) {
@@ -423,12 +526,13 @@ function KeywordBar(parentDiv, data, rectWidth, rectHeight) {
             return _self.x(d.value);
         })
         .style("fill", function (d, i) {
-            return "#EEE";
+            return "rgb(" + colors[Math.round(sentiments[d.key] / d.value)] + ")";
         })
         .style("stroke", function (d, i) {
             return "#888";
         })
-        .style("fill-opacity", 0.8);
+        .style("fill-opacity", 0.5)
+        .attr("stroke-width", 1);
 
     selection.exit().transition().duration(10).remove();
 

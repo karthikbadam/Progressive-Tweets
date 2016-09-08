@@ -13,56 +13,10 @@ function HorizontalBar(options) {
 
     _self.popularUsers = d3.map();
 
-    var optionHandlers = _self.optionHandlers = {};
-
     _self.stopFlag = false;
     _self.pauseFlag = false;
 
-    optionHandlers["stop"] = function () {
-
-        if (_self.stopFlag == false) {
-
-            _self.stopFlag = true;
-
-        } else {
-
-            _self.stopFlag = false;
-
-        }
-
-    }
-
-    optionHandlers["pause"] = function () {
-
-        if (_self.pauseFlag == false) {
-
-            _self.pauseFlag = true;
-
-        } else {
-
-            _self.pauseFlag = false;
-
-        }
-
-    }
-
-    optionHandlers["play"] = function () {
-
-        _self.pauseFlag = false;
-        _self.stopFlag = false;
-
-    }
-
-    optionHandlers["rewind"] = function () {
-
-    }
-
-    optionHandlers["forward"] = function () {
-
-    }
-
-
-    Feedback.addControlMinimize(parentDiv, _self, optionHandlers);
+    Feedback.addControlMinimize(parentDiv, _self);
 
     var margin = {
             top: 25,
@@ -84,7 +38,7 @@ function HorizontalBar(options) {
     var x = _self.x = d3.scaleLinear()
         .range([0, width]);
 
-    _self.highest = 10;
+    _self.highest = 5;
 
     var xAxis = _self.xAxis = d3.axisTop(x).ticks(5, ",d").tickSizeInner(height)
         .tickSizeOuter(0)
@@ -119,15 +73,35 @@ function HorizontalBar(options) {
 
 HorizontalBar.prototype.pause = function () {
     var _self = this;
-    _self.pauseFlag = true;
+    _self.pauseFlag = !_self.pauseFlag;
     if (_self.pauseFlag) {
         _self.miniControlDiv.select("#pause").style("background-image", 'url("/images/play.png")');
     } else {
         _self.miniControlDiv.select("#pause").style("background-image", 'url("/images/pause.png")');
     }
 
+}
+
+HorizontalBar.prototype.stop = function () {
+    var _self = this;
+    _self.stopFlag = !_self.stopFlag;
+    if (_self.stopFlag) {
+        _self.miniControlDiv.select("#stop").style("background-image", 'url("/images/play.png")');
+    } else {
+        _self.miniControlDiv.select("#stop").style("background-image", 'url("/images/stop.png")');
+    }
+}
+
+HorizontalBar.prototype.forward = function () {
+    var _self = this;
 
 }
+
+HorizontalBar.prototype.rewind = function () {
+    var _self = this;
+
+}
+
 
 HorizontalBar.prototype.highlight = function (cache) {
     var _self = this;
@@ -153,16 +127,25 @@ HorizontalBar.prototype.highlight = function (cache) {
     });
 
     _self.selectedUsersData = _self.selectedUsers.entries().sort(function (a, b) {
-        return b.value - a.value;
+
+        if (a.value == b.value) {
+            return (a.key < b.key) ? -1 : (a.key > b.key) ? 1 : 0;
+        }
+        else {
+            return (a.value < b.value) ? -1 : 1;
+        }
+
+        return 0;
+
     });
 
     var selectedAuthors = _self.selectedUsersData.map(function (d) {
-            return d.key;
-    }).reverse();
+        return d.key;
+    });
 
-    selectedAuthors = selectedAuthors.concat(_self.y.domain());
+    selectedAuthors = selectedAuthors.concat(_self.y.domain()).reverse();
 
-    _self.y.domain(selectedAuthors.slice(0, Math.floor(_self.height / 15)).reverse());
+    _self.y.domain(selectedAuthors.slice(selectedAuthors.length -  Math.floor(_self.height / 15), selectedAuthors.length));
 
     var max = d3.max(_self.selectedUsersData, function (d) {
         return d.value;
@@ -170,17 +153,18 @@ HorizontalBar.prototype.highlight = function (cache) {
 
     _self.x.domain([0, max]);
 
-    _self.xAxis.ticks(max > 5? 5: max);
+    _self.xAxis.ticks(max > 5 ? 5 : max);
 
     _self.svg.select(".x.axis").call(_self.xAxis);
     _self.svg.select(".y.axis").call(_self.yAxis);
 
     var selection = _self.svg.selectAll(".bar")
-        .data(_self.selectedUsersData);
+        .data(_self.selectedUsersData, function (d, i) {
+            return i;
+        });
 
     selection.enter()
         .append("rect")
-        .transition().duration(10)
         .attr("class", "bar")
         .attr("y", function (d, i) {
 
@@ -245,8 +229,20 @@ HorizontalBar.prototype.draw = function (cache) {
     });
 
     _self.popularUsersData = _self.popularUsers.entries().sort(function (a, b) {
-        return b.value - a.value;
-    }).slice(0, Math.floor(_self.height / 15));
+
+        if (a.value == b.value) {
+            return (a.key < b.key) ? -1 : (a.key > b.key) ? 1 : 0;
+        }
+        else {
+            return (a.value < b.value) ? -1 : 1;
+        }
+
+        return 0;
+
+    });
+
+    _self.popularUsersData =  _self.popularUsersData
+        .slice(_self.popularUsersData.length -  Math.floor(_self.height / 15), _self.popularUsersData.length);
 
     if (!_self.pauseFlag) {
 
@@ -254,7 +250,7 @@ HorizontalBar.prototype.draw = function (cache) {
 
         _self.y.domain(_self.popularUsersData.map(function (d) {
             return d.key;
-        }).reverse());
+        }));
 
         var max = d3.max(_self.popularUsersData, function (d) {
             return d.value;
@@ -264,17 +260,33 @@ HorizontalBar.prototype.draw = function (cache) {
             _self.highest = 2 * max;
 
         }
+
         _self.x.domain([0, _self.highest]);
 
+        _self.xAxis.ticks(_self.highest > 5 ? 5 : _self.highest);
+
         _self.svg.select(".x.axis").call(_self.xAxis);
+
+        _self.yAxis = d3.axisLeft(_self.y);
+
         _self.svg.select(".y.axis").call(_self.yAxis);
 
         var selection = _self.svg.selectAll(".bar")
-            .data(_self.popularUsersData);
+            .data(_self.popularUsersData, function (d, i) {
+                return d.key;
+            });
+
+        selection
+            .attr("y", function (d, i) {
+                return _self.y(d.key);
+            })
+            .attr("height", _self.y.bandwidth())
+            .attr("width", function (d) {
+                return _self.x(d.value);
+            });
 
         selection.enter()
             .append("rect")
-            .transition().duration(10)
             .attr("class", "bar")
             .attr("y", function (d, i) {
 
@@ -295,26 +307,7 @@ HorizontalBar.prototype.draw = function (cache) {
             })
             .style("fill-opacity", 1);
 
-        selection.transition().duration(10)
-            .attr("y", function (d, i) {
-                return _self.y(d.key);
-            })
-            .attr("height", _self.y.bandwidth())
-            .attr("x", function (d) {
-                return 0;
-            })
-            .attr("width", function (d) {
-                return _self.x(d.value);
-            })
-            .style("fill", function (d, i) {
-                return "#EEE";
-            })
-            .style("stroke", function (d, i) {
-                return "#222";
-            })
-            .style("fill-opacity", 1);
-
-        selection.exit().transition().duration(10).remove();
+        selection.exit().remove();
     }
 
 }

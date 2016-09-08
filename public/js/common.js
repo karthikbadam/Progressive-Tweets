@@ -98,7 +98,28 @@ var Feedback = {
                 .style("fill-opacity", function (d) {
                     return 0.5;
                 });
+
+            _self.progressCurrentSvg.append("rect")
+                .attr("class", "playhead")
+                .attr("x", 0)
+                .attr("y", 0)
+                .attr("width", 5)
+                .attr("height", _self.progressHeight)
+                .style("fill", "black")
+                .style("fill-opacity", 1)
+                .on("start", function (d) {
+
+                })
+                .on("move", function (d) {
+
+                })
+                .on("end", function (d) {
+
+                });
         }
+
+        _self.progressCurrentSvg.select(".playhead")
+            .attr("x", _self.progressWidth * (progress["current"]) / progress["total"]);
 
         var progressAnnotations = _self.progressCurrentSvg.selectAll(".annotation")
             .data([progress["current"], progress["total"]]);
@@ -156,7 +177,7 @@ var Feedback = {
 
     },
 
-    addControlMinimize: function (divID, context, optionHandlers) {
+    addControlMinimize: function (divID, context) {
 
         var _self = context;
 
@@ -177,7 +198,9 @@ var Feedback = {
             .attr("id", "rewind")
             .attr("class", "minicontrol")
             .style("background-image", 'url("/images/rewind.png")')
-            .on("click", optionHandlers["rewind"]);
+            .on("click", function () {
+                _self.rewind();
+            });
 
         // _self.miniControlDiv.append("div")
         //     .attr("id", "play")
@@ -189,28 +212,24 @@ var Feedback = {
             .attr("class", "minicontrol")
             .style("background-image", 'url("/images/pause.png")')
             .on("click", function () {
-
-                optionHandlers["pause"]();
-
-                if (context.pauseFlag) {
-                    d3.select(this).style("background-image", 'url("/images/play.png")');
-                } else {
-                    d3.select(this).style("background-image", 'url("/images/pause.png")');
-                }
-
+                _self.pause();
             });
 
         _self.miniControlDiv.append("div")
             .attr("id", "forward")
             .attr("class", "minicontrol")
             .style("background-image", 'url("/images/forward.png")')
-            .on("click", optionHandlers["forward"]);
+            .on("click", function () {
+                _self.forward();
+            });
 
         _self.miniControlDiv.append("div")
             .attr("id", "stop")
             .attr("class", "minicontrol")
             .style("background-image", 'url("/images/stop.png")')
-            .on("click", optionHandlers["stop"]);
+            .on("click", function () {
+                _self.stop();
+            });
 
         _self.expanded = false;
 

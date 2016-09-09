@@ -51,6 +51,11 @@ var Feedback = {
             var playHeadIndex = Math.round(d3.event.x * _self.currentProgress["total"] / _self.currentProgress["current"]);
 
             console.log(playHeadIndex);
+
+            socket.send(wrapMessage("change playhead", {
+                content: {target: "target", value: playHeadIndex}
+            }));
+
         }
 
         _self.tweetContentDiv = d3.select('#' + divID).append("div")

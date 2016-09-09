@@ -1,4 +1,5 @@
 import Settings
+from Computation import Computation
 import tornado.escape
 import tornado.ioloop
 import tornado.web as web
@@ -8,20 +9,23 @@ import random
 from tornado import iostream
 import tornadis
 from concurrent.futures import ProcessPoolExecutor, ThreadPoolExecutor
+from tornado.ioloop import IOLoop
 
 import math
 import os.path
 import os, sys
 import json
+import logging
 import time
+import re
 import numpy as np
-from tornado.ioloop import IOLoop
 
 from sklearn.manifold import TSNE
 from sklearn.manifold import MDS
 from sklearn.feature_extraction.text import TfidfVectorizer
 from sklearn.metrics.pairwise import linear_kernel
-import re, nltk, json
+
+import nltk
 from nltk import ngrams
 from nltk.stem.porter import PorterStemmer
 from nltk.corpus import stopwords
@@ -29,44 +33,56 @@ from nltk.stem import WordNetLemmatizer
 from nltk.corpus import wordnet
 import gensim
 from gensim import corpora, models
-import logging
-from itertools import product
 from vaderSentiment.vaderSentiment import sentiment as vaderSentiment
 
 ## Logging all the messages
 logging.basicConfig(format='%(levelname)s:%(message)s', level=logging.DEBUG)
 logger = logging.getLogger(__name__)
 
-## Global variables
+## Global variables for controlling the progression
 pauseInterface = False
 revertInterface = False
 stopInterface = False
 
+fileReading = Computation("file")
+sentimentAnalysis = Computation("sentiment")
+userPopularity = Computation("user")
+layoutComputation = Computation("layout")
+
+## Global variables for managing the progression (file reading and storage)-- need to be replaced with a database
+playHead = 1
 contentCache = []
 layoutCache = []
 totalLines = 1
-
-bin2DRows = 80
-bin2DCols = 40
-
-distanceTexts = np.zeros([1, 1])
-
-thread_pool = ThreadPoolExecutor(200)
-
-## -------------------------------------------------------------------
-stemmer = PorterStemmer()
-wordnetLemmatizer = WordNetLemmatizer()
-
 # Columns in the text dataset -- republican dataset
 sentimentCol = "sentiment"
 authorNameCol = "name"
 textContentCol = "text"
-
-
 # # Columns in the text dataset -- general dataset
 # sentimentCol = "rating.1"
 # authorNameCol = "author.name"
 # textContentCol = "content"
+
+
+## Global variables for layout computation
+bin2DRows = 80
+bin2DCols = 40
+distanceTexts = np.zeros([1, 1])
+
+## Global variables for NLTK stuff
+stopset = stopwords.words('english')
+freq_words = ['http', 'https', 'amp', 'com', 'co', 'th', 'textdebate', 'debate', 'mccain', 'obama', 'gopdebate',
+              'gopdebates', 'rt']
+for i in freq_words:
+    stopset.append(i)
+
+textCorpus = []
+
+## Global variables for the code
+thread_pool = ThreadPoolExecutor(200)
+stemmer = PorterStemmer()
+wordnetLemmatizer = WordNetLemmatizer()
+
 
 def stem_tokens(tokens, stemmer):
     stemmed = []
@@ -84,15 +100,6 @@ def tokenize(text):
     tokens = nltk.word_tokenize(text.strip())
     tokens = nltk.pos_tag(tokens)
     return tokens
-
-
-stopset = stopwords.words('english')
-freq_words = ['http', 'https', 'amp', 'com', 'co', 'th', 'textdebate', 'debate', 'mccain', 'obama', 'gopdebate',
-              'gopdebates', 'rt']
-for i in freq_words:
-    stopset.append(i)
-
-textCorpus = []
 
 
 def generateKeywords(text):
@@ -143,10 +150,56 @@ def analyzeTopic():
     # send('topics information', topics)
 
 
+
+
+## Alternatively there are seperate functions for all four methods and they are called seperately?
+@gen.coroutine
+def handlePlayHead(playHead, lineNumber, chunkSize, client):
+    ## -------------------------------------
+    ## For when the play head is changed
+    counter = 0
+    chunkCounter = 0
+    cache = []
+    chunkBytes = 0
+    while playHead < lineNumber:
+        print(playHead)
+        counter += 1
+        cache.append(contentCache[playHead - 1])
+        chunkBytes += contentCache[playHead - 1]["bytes"]
+        if counter % chunkSize == 1 and counter >= chunkSize:
+            chunkCounter += 1
+
+            message = {}
+            message["id"] = chunkCounter
+            message["content"] = cache
+            message["absolute-progress"] = {
+                "current": playHead,
+                "total": totalLines
+            }
+
+            if fileReading.playHeadChanged:
+                fileReading.send_content(contentCache[playHead - 1], client)
+
+            if sentimentAnalysis.playHeadChanged:
+                sentimentAnalysis.send_content(contentCache[playHead - 1], client)
+
+            if sentimentAnalysis.playHeadChanged:
+                sentimentAnalysis.send_content(contentCache[playHead - 1], client)
+
+            cache = []
+            chunkBytes = 0
+
+        time.sleep(0.01)
+        playHead += 1
+        ## -------------------------------------
+
+
 ## Currently for csv files or tsv files
 @gen.coroutine
 def readFileProgressive(data, client):
     global totalLines
+    global playHead
+
     filename = data["content"]
     chunkSize = data["chunkSize"]
     counter = 0
@@ -158,11 +211,10 @@ def readFileProgressive(data, client):
     bytesRead = 0.0
 
     lineNumber = 1
-    chunkBytes = 0.0
 
-    ## Line index of the last element in the current chunk
-    ## This is controlled by the client
-    playHead = 1
+    fileReading.start_collection()
+    sentimentAnalysis.start_collection()
+    userPopularity.start_collection()
 
     with open("public/data/" + filename, 'r') as infile:
         for line in infile:
@@ -171,128 +223,94 @@ def readFileProgressive(data, client):
                 totalSize = totalSize - sys.getsizeof(line)
                 counter = 1
             else:
-                textDatum = {}
 
                 while pauseInterface:
                     logger.info("system paused")
 
-                ## -------------------------------------
-                ## For when the play head is changed
-                counter2 = 0
-                chunkCounter2 = 0
-                cache2 = []
-                chunkBytes2 = 0
-                while playHead < lineNumber:
-                    cache2.append(contentCache[playHead - 1])
-                    chunkBytes2 += contentCache[playHead - 1]["bytes"]
-                    if counter2 % chunkSize == 1 and counter2 >= chunkSize:
-                        chunkCounter2 += 1
-
-                        message = {}
-                        message["id"] = chunkCounter2
-                        message["content"] = cache2
-                        message["absolute-progress"] = {
-                            "current": playHead,
-                            "total": totalLines,
-                            "relative": chunkBytes2
-                        }
-
-                        client.send_message("file content", message)
-                        client.send_message("sentiment content", message)
-                        client.send_message("user content", message)
-
-                        cache2 = []
-                        chunkBytes2 = 0
-
-                    time.sleep(0.005)
-                    playHead += 1
-                ## -------------------------------------
-
-                ## -------------------------------------
-                ## For when the revert operation is selected
-                counter2 = 0
-                chunkCounter2 = 0
-                cache2 = []
-                chunkBytes2 = 0
-                while playHead > 0 and revertInterface:
-                    cache2.append(contentCache[playHead - 1])
-                    chunkBytes2 += contentCache[playHead - 1]["bytes"]
-                    if counter2 % chunkSize == 1 and counter2 >= chunkSize:
-                        chunkCounter2 += 1
-
-                        message = {}
-                        message["id"] = chunkCounter2
-                        message["content"] = cache2
-                        message["absolute-progress"] = {
-                            "current": playHead,
-                            "total": totalLines,
-                            "relative": chunkBytes2
-                        }
-
-                        client.send_message("file content", message)
-                        client.send_message("sentiment content", message)
-                        client.send_message("user content", message)
-
-                        cache2 = []
-                        chunkBytes2 = 0
-
-                    time.sleep(0.005)
-                    playHead += 1
-                ## -------------------------------------
-
-                ## -------------------------------------
-                ## For when the forward operation is selected
-                counter2 = 0
-                chunkCounter2 = 0
-                cache2 = []
-                chunkBytes2 = 0
-                while playHead < lineNumber:
-                    cache2.append(contentCache[playHead - 1])
-                    chunkBytes2 += contentCache[playHead - 1]["bytes"]
-                    if counter2 % chunkSize == 1 and counter2 >= chunkSize:
-                        chunkCounter2 += 1
-
-                        message = {}
-                        message["id"] = chunkCounter2
-                        message["content"] = cache2
-                        message["absolute-progress"] = {
-                            "current": playHead,
-                            "total": totalLines,
-                            "relative": chunkBytes2
-                        }
-
-                        client.send_message("file content", message)
-                        client.send_message("sentiment content", message)
-                        client.send_message("user content", message)
-
-                        cache2 = []
-                        chunkBytes2 = 0
-
-                    time.sleep(0.005)
-                    playHead += 1
-                ## -------------------------------------
-
-                ## -------------------------------------
-                ## For when the stop operation is selected
-                while stopInterface == True:
-                    playHead = 1
-
-                ## -------------------------------------
+                # ## -------------------------------------
+                # ## For when the revert operation is selected
+                # counter2 = 0
+                # chunkCounter2 = 0
+                # cache2 = []
+                # chunkBytes2 = 0
+                # while playHead > 0 and revertInterface:
+                #     cache2.append(contentCache[playHead - 1])
+                #     chunkBytes2 += contentCache[playHead - 1]["bytes"]
+                #     if counter2 % chunkSize == 1 and counter2 >= chunkSize:
+                #         chunkCounter2 += 1
+                #
+                #         message = {}
+                #         message["id"] = chunkCounter2
+                #         message["content"] = cache2
+                #         message["absolute-progress"] = {
+                #             "current": playHead,
+                #             "total": totalLines,
+                #             "relative": chunkBytes2
+                #         }
+                #
+                #         client.send_message("file content", message)
+                #         client.send_message("sentiment content", message)
+                #         client.send_message("user content", message)
+                #
+                #         cache2 = []
+                #         chunkBytes2 = 0
+                #
+                #     time.sleep(0.005)
+                #     playHead += 1
+                # ## -------------------------------------
+                #
+                # ## -------------------------------------
+                # ## For when the forward operation is selected
+                # counter2 = 0
+                # chunkCounter2 = 0
+                # cache2 = []
+                # chunkBytes2 = 0
+                # while playHead < lineNumber:
+                #     cache2.append(contentCache[playHead - 1])
+                #     chunkBytes2 += contentCache[playHead - 1]["bytes"]
+                #     if counter2 % chunkSize == 1 and counter2 >= chunkSize:
+                #         chunkCounter2 += 1
+                #
+                #         message = {}
+                #         message["id"] = chunkCounter2
+                #         message["content"] = cache2
+                #         message["absolute-progress"] = {
+                #             "current": playHead,
+                #             "total": totalLines,
+                #             "relative": chunkBytes2
+                #         }
+                #
+                #         client.send_message("file content", message)
+                #         client.send_message("sentiment content", message)
+                #         client.send_message("user content", message)
+                #
+                #         cache2 = []
+                #         chunkBytes2 = 0
+                #
+                #     time.sleep(0.005)
+                #     playHead += 1
+                # ## -------------------------------------
+                #
+                # ## -------------------------------------
+                # ## For when the stop operation is selected
+                # while stopInterface == True:
+                #     playHead = 1
+                #
+                # ## -------------------------------------
 
                 bytesRead = bytesRead + len(line)
                 linesRead = lineNumber
                 totalLines = int(round((linesRead / bytesRead) * totalSize))
-                chunkBytes = chunkBytes + len(line)
 
+                textDatum = {}
                 values = line.strip().split("\t")
                 for i, value in enumerate(values):
-                    textDatum[colnames[i]] = unicode(value, errors='ignore')
+                    if i < len(colnames):
+                        textDatum[colnames[i]] = unicode(value, errors='ignore')
 
                 textDatumOut = {}
                 textDatumOut["id"] = lineNumber - 1
                 textSentimentVader = vaderSentiment(textDatum[textContentCol])
-                # {'neg': 0.0, 'neu': 0.254, 'pos': 0.746, 'compound': 0.8316}
-
                 textDatumOut["sentiment"] = "Positive" if textSentimentVader["compound"] > 0.25 else "Negative" if \
                     textSentimentVader["compound"] < -0.25 else "Neutral"
                 textDatumOut["content"] = textDatum[textContentCol]
@@ -304,11 +322,19 @@ def readFileProgressive(data, client):
                 if len(contentCache) < lineNumber:
                     contentCache.append(textDatumOut)
 
-                cache.append({"content": textDatumOut["content"],
-                              "sentiment": textDatumOut["sentiment"],
-                              "author": textDatumOut["author"],
-                              "textId": textDatumOut["textId"],
-                              "id": counter - 1})
+                fileReading.setProgress(absProgress=linesRead, absProgressLimit=totalLines,  absTimeLeft=5)
+                sentimentAnalysis.setProgress(absProgress=linesRead, absProgressLimit=totalLines,  absTimeLeft=5)
+                userPopularity.setProgress(absProgress=linesRead, absProgressLimit=totalLines,  absTimeLeft=5)
+
+                fileReading.send_data(textDatumOut, client)
+                sentimentAnalysis.send_data(textDatumOut, client)
+                userPopularity.send_data(textDatumOut, client)
+
+                # cache.append({"content": textDatumOut["content"],
+                #               "sentiment": textDatumOut["sentiment"],
+                #               "author": textDatumOut["author"],
+                #               "textId": textDatumOut["textId"],
+                #               "id": counter - 1})
 
                 counter = counter + 1
 
@@ -325,26 +351,25 @@ def readFileProgressive(data, client):
                         distanceTexts[i][lineNumber - 1] = distanceTexts[lineNumber - 1][i]
                     distanceTexts[lineNumber - 1][lineNumber - 1] = 0
 
-                if counter % chunkSize == 1 and counter >= chunkSize:
-                    chunkCounter = chunkCounter + 1
-
-                    message = {}
-                    message["id"] = chunkCounter
-                    message["content"] = cache
-                    message["absolute-progress"] = {
-                        "current": linesRead,
-                        "total": totalLines,
-                        "relative": chunkBytes
-                    }
-
-
-                    client.send_message("file content", message)
-                    client.send_message("sentiment content", message)
-                    client.send_message("user content", message)
-
-                    cache = []
-                    counter = 1
-                    chunkBytes = 0
+                # if counter % chunkSize == 1 and counter >= chunkSize:
+                #     chunkCounter = chunkCounter + 1
+                #
+                #     message = {}
+                #     message["id"] = chunkCounter
+                #     message["content"] = cache
+                #     message["absolute-progress"] = {
+                #         "current": linesRead,
+                #         "total": totalLines,
+                #         "relative": chunkBytes
+                #     }
+                #
+                #     client.send_message("file content", message)
+                #     client.send_message("sentiment content", message)
+                #     client.send_message("user content", message)
+                #
+                #     cache = []
+                #     counter = 1
+                #     chunkBytes = 0
 
                 time.sleep(0.05)
 
@@ -412,6 +437,7 @@ def semantic(allsyns1, allsyns2):
     count = len(list(set(allsyns1))) + len(list(set(allsyns2))) + 0.0
 
     return count - 2 * sum
+
 
 def layoutGenerationProgressive(data, client):
     global layoutCache
@@ -571,6 +597,7 @@ def keywordDistribution(message):
 @gen.coroutine
 def handleEvent(client, event, message):
     global pauseInterface
+    global playHead
 
     logger.info("event " + str(event))
     if event == "request file":
@@ -621,10 +648,16 @@ def handleEvent(client, event, message):
         client.send_message("keyword content", message)
 
     if event == "pause interface":
+        # target = message["content"]
         if pauseInterface:
             pauseInterface = False
         else:
             pauseInterface = True
+
+    if event == "change playhead":
+        print "\n-------------------------------------------------------" + str(message["content"])
+        target = message["content"]["target"]
+        playHead = message["content"]["value"]
 
 
 class SocketHandler(tornado.websocket.WebSocketHandler):

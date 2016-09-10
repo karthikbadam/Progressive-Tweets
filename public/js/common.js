@@ -53,9 +53,18 @@ var Feedback = {
             console.log(playHeadIndex);
 
             socket.send(wrapMessage("change playhead", {
-                content: {target: "target", value: playHeadIndex}
+                content: {target: _self.name, value: playHeadIndex}
             }));
 
+            if (Math.abs(_self.currentProgress["current"] - playHeadIndex) < 20) {
+                if (commonButtons.pauseFlag) {
+                    commonButtons.pause(safe=true);
+                }
+            }
+
+            if (!commonButtons.pauseFlag) {
+                commonButtons.pause(safe=true);
+            }
         }
 
         _self.tweetContentDiv = d3.select('#' + divID).append("div")

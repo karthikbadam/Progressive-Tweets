@@ -6,6 +6,8 @@ function List(options) {
 
     var _self = this;
 
+    _self.name = options.name;
+
     var parentDiv = _self.parentDiv = "content-left";
 
     var contentDiv = _self.contentDiv = Feedback.addProgressBar(parentDiv, _self);
@@ -44,6 +46,7 @@ function List(options) {
 List.prototype.pause = function () {
     var _self = this;
     _self.pauseFlag = !_self.pauseFlag;
+    socket.send(wrapMessage("pause interface", _self.name));
     if (_self.pauseFlag) {
         _self.miniControlDiv.select("#pause").style("background-image", 'url("/images/play.png")');
     } else {
@@ -96,14 +99,12 @@ List.prototype.draw = function (cache) {
         Feedback.updateProgressBar(_self, progress);
 
         _self.textContentDiv.selectAll(".textContent")
-                .style("background-color", "white");
+            .style("background-color", "white");
 
         tweetChunk.forEach(function (textData, i) {
 
             // Adding tweet to the list
-            var textId = ((chunkId - 1) * tweetChunk.length + i);
-
-            socket.send(wrapMessage("request layout", {content: textId, chunkSize: 100}));
+            var textId = textData["id"];
 
             if (!isNaN(textData["sentiment"]) && textData["sentiment"] > 0) {
 
@@ -115,7 +116,7 @@ List.prototype.draw = function (cache) {
                 sentiment = emotions.indexOf(textData["sentiment"]);
             }
 
-            _self.textContentDiv.insert("div",":first-child")
+            var currentTextDiv = _self.textContentDiv.insert("div", ":first-child")
                 .attr("id", "list" + textId)
                 .style("background-color",
                     "rgba(" + colors[sentiment] + ",0.5)")
@@ -123,11 +124,36 @@ List.prototype.draw = function (cache) {
                 .append("div")
                 .attr("class", "textContent")
                 .style("background-color",
-                    "rgba(" + "230, 230, 230" + ",1)")
+                    "rgba(" + "240, 240, 240" + ",1)")
                 .style("margin-left", "10px")
                 .style("font-size", "12px")
                 .style("padding-left", "2px")
-                .text("(" + textData["textId"] + ") " + textData["author"] + ": " + textData["content"]);
+                .style("width", "100%");
+
+            var words = textData["content"].split(" ");
+            words.unshift(textData["author"] + ":");
+
+            var textWeight = d3.scaleLinear().range(500, 900);
+            if ("keywords" in cache) {
+                textWeight.domain(d3.extent(Object.keys(cache["keywords"]), function (key) {
+                    return cache["keywords"][key];
+                }))
+            }
+            words.forEach(function (word, i) {
+                currentTextDiv.append("span")
+                    .text(word + " ")
+                    .style("font-weight", function () {
+                        if ("keywords" in cache) {
+                            var keys = Object.keys(cache["keywords"]);
+                            tWord = word.replace("@", "").replace("#", "").replace(":", "").toLowerCase();
+                            if (keys.indexOf(tWord) >= 0) {
+                                return textWeight(cache["keywords"][tWord]);
+                            } else {
+                                return 100;
+                            }
+                        }
+                    });
+            });
 
 
             _self.listIDStack.push("list" + textId);
@@ -139,7 +165,7 @@ List.prototype.draw = function (cache) {
 
                 _self.currentHeight = _self.currentHeight - $("#" + _self.listIDStack[0]).height();
 
-                 _self.removedHeight = _self.removedHeight + $("#" + _self.listIDStack[0]).height();
+                _self.removedHeight = _self.removedHeight + $("#" + _self.listIDStack[0]).height();
 
                 _self.textContentDiv.select("#" + _self.listIDStack.shift()).remove();
 
@@ -154,7 +180,6 @@ List.prototype.draw = function (cache) {
 }
 
 
-
 List.prototype.highlight = function (cache) {
 
     var _self = this;
@@ -166,8 +191,8 @@ List.prototype.highlight = function (cache) {
     _self.currentHeight = 0;
     _self.listIDStack = [];
 
-     _self.textContentDiv.selectAll(".textContent")
-            .style("background-color", "white");
+    _self.textContentDiv.selectAll(".textContent")
+        .style("background-color", "white");
 
     tweetChunk.forEach(function (textData, i) {
         // Adding tweet to the list
@@ -185,18 +210,48 @@ List.prototype.highlight = function (cache) {
             sentiment = emotions.indexOf(textData["sentiment"]);
         }
 
-        _self.textContentDiv.insert("div",":first-child")
+        var currentTextDiv = _self.textContentDiv.insert("div", ":first-child")
             .attr("id", "list" + textId)
             .style("background-color",
                 "rgba(" + colors[sentiment] + ",0.5)")
             .style("margin", "2px")
             .append("div")
             .attr("class", "textContent")
-            .style("background-color", "white")
+            .style("background-color",
+                "rgba(" + "230, 230, 230" + ",1)")
             .style("margin-left", "10px")
             .style("font-size", "12px")
             .style("padding-left", "2px")
-            .text("(" + textData["textId"] + ") " + textData["author"] + ": " + textData["content"]);
+            .style("width", "100%");
+
+        var words = textData["content"].split(" ");
+        words.unshift(textData["author"] + ":");
+
+        words.forEach(function (word) {
+            currentTextDiv.append("span").text(word);
+        });
+
+        var textWeight = d3.scaleLinear().range(500, 900);
+        if ("keywords" in cache) {
+            textWeight.domain(d3.extent(Object.keys(cache["keywords"]), function (key) {
+                return cache["keywords"][key];
+            }))
+        }
+        words.forEach(function (word, i) {
+            currentTextDiv.append("span")
+                .text(word + " ")
+                .style("font-weight", function () {
+                    if ("keywords" in cache) {
+                        var keys = Object.keys(cache["keywords"]);
+                        tWord = word.replace("@", "").replace("#", "").replace(":", "").toLowerCase();
+                        if (keys.indexOf(tWord) >= 0) {
+                            return textWeight(cache["keywords"][tWord]);
+                        } else {
+                            return 100;
+                        }
+                    }
+                });
+        });
 
         _self.listIDStack.push("list" + textId);
 

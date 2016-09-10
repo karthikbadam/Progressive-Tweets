@@ -9,6 +9,8 @@ function HorizontalBar(options) {
 
     var parentDiv = _self.parentDiv = "userDiv";
 
+    _self.name = options.name;
+
     var contentDiv = Feedback.addProgressBar(parentDiv, _self);
 
     _self.popularUsers = d3.map();
@@ -40,7 +42,7 @@ function HorizontalBar(options) {
 
     _self.highest = 5;
 
-    var xAxis = _self.xAxis = d3.axisTop(x).ticks(5, ",d").tickSizeInner(height)
+    var xAxis = _self.xAxis = d3.axisTop(x).ticks(5, ",d").tickSizeInner(-height)
         .tickSizeOuter(0)
         .tickPadding(10);
 
@@ -54,12 +56,12 @@ function HorizontalBar(options) {
 
     svg.append("g")
         .attr("class", "x axis")
-        .attr("transform", "translate(0," + height + ")")
+        .attr("transform", "translate(0,0)")
         .call(xAxis)
         .style("font-size", "12px")
         .append("text")
         .attr("x", width - 50)
-        .attr("dy", ".71em")
+        .attr("dy", "-.71em")
         .style("font-size", "15px")
         .style("text-anchor", "end")
         .text("#Tweets");
@@ -74,6 +76,7 @@ function HorizontalBar(options) {
 HorizontalBar.prototype.pause = function () {
     var _self = this;
     _self.pauseFlag = !_self.pauseFlag;
+    socket.send(wrapMessage("pause interface", _self.name));
     if (_self.pauseFlag) {
         _self.miniControlDiv.select("#pause").style("background-image", 'url("/images/play.png")');
     } else {

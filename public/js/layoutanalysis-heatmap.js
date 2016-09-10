@@ -6,6 +6,8 @@ function Heatmap(options) {
 
     var _self = this;
 
+    _self.name = options.name;
+
     var parentDiv = _self.parentDiv = "content-right";
 
     var contentDiv = _self.contentDiv = Feedback.addProgressBar(parentDiv, _self);
@@ -42,11 +44,14 @@ function Heatmap(options) {
 
     var lasso_end = function () {
 
+        d3.select("#keywordDiv").remove();
+
+
         lasso.items().attr("fill", function (d, i) {
-            if (d["content"] == 0) {
+            if (d["content"]["density"] == 0) {
                 return "white";
             }
-            return _self.heatmapColorScale(d["content"]);
+            return _self.heatmapColorScale(d["content"]["density"]);
 
         }).attr("stroke-width", 1).attr("stroke", "white");
 
@@ -69,10 +74,10 @@ function Heatmap(options) {
         })
             .attr("stroke-width", 10)
             .attr("stroke", function (d, i) {
-                if (d["content"] == 0) {
+                if (d["content"]["density"] == 0) {
                     return "white";
                 }
-                return _self.heatmapColorScale(d["content"]);
+                return _self.heatmapColorScale(d["content"]["density"]);
 
             });
 
@@ -127,16 +132,21 @@ function Heatmap(options) {
 Heatmap.prototype.pause = function () {
     var _self = this;
     _self.pauseFlag = !_self.pauseFlag;
+    socket.send(wrapMessage("pause interface", _self.name));
     if (_self.pauseFlag) {
         _self.miniControlDiv.select("#pause").style("background-image", 'url("/images/play.png")');
+        _self.svg.selectAll(".label").style("display", "none");
+
     } else {
         _self.miniControlDiv.select("#pause").style("background-image", 'url("/images/pause.png")');
+        _self.svg.selectAll(".label").style("display", "block");
+
 
         _self.lasso.items().attr("fill", function (d, i) {
-            if (d["content"] == 0) {
+            if (d["content"]["density"] == 0) {
                 return "white";
             }
-            return _self.heatmapColorScale(d["content"]);
+            return _self.heatmapColorScale(d["content"]["density"]);
 
         })
             .attr("stroke-width", 1)
@@ -166,11 +176,95 @@ Heatmap.prototype.rewind = function () {
 
 }
 
+Heatmap.prototype.drawClusters = function (data) {
+    var _self = this;
+
+    _self.clusters = data["content"]["clusters"];
+
+
+    _self.clusters.forEach(function (cluster, i) {
+
+        var customHull = d3.polygonHull(cluster["points"]
+            .map(function (d) {
+
+                return [(d["col"] + 0.5) * (_self.width / _self.bin2DCols), (d["row"] + 0.5) * (_self.height / _self.bin2DRows)];
+            }));
+
+        var hull;
+
+        if (_self.svg.select("#hull" + i).empty()) {
+            hull = _self.svg.append("path").attr("id", "hull" + i).attr("class", "hull");
+        } else {
+            hull = _self.svg.select("#hull" + i);
+        }
+
+        hull.datum(customHull)
+            .attr("d", function (d) {
+                cluster["mean"] = [d3.mean(d, function (g) {
+                    return g[0];
+                }), d3.mean(d, function (g) {
+                    return g[1];
+                })];
+
+                return "M" + d.map(function (n) {
+                        return [n[0], n[1]]
+                    }).join("L") + "Z";
+            })
+            .style("fill", "#666")
+            .style("fill-opacity", 0.1)
+            .style("stroke", "#666")
+            .style("stroke-width", "0px")
+            .style("stroke-linejoin", "round")
+            .style("pointer-events", "none");
+
+    });
+
+}
+
+Heatmap.prototype.drawLabels = function (data) {
+
+    var _self = this;
+
+    _self.clusters = data["content"]["clusters"];
+
+    _self.svg.selectAll(".label").remove();
+
+     var labels = _self.svg.selectAll(".label").data(_self.clusters)
+        .enter().append("g")
+        .attr("id", function (d, i) {
+            return "label" + i;
+        })
+        .attr("class", "label");
+
+    labels.append("text")
+        .each(function (d) {
+            var arr = d["keywords"]
+            if (arr != undefined) {
+                for (i = 0; i < 10; i++) {
+                    d3.select(this).append("tspan")
+                        .text(arr[i]["word"])
+                        .attr("dy", i ? "1.2em" : 0)
+                        .attr("x", 0)
+                        .attr("text-anchor", "middle")
+                        .attr("class", "tspan" + i);
+                }
+            }
+        })
+        .style("font-size", "0.7em")
+        .attr("transform", function (d) {
+            var attr = this.getBBox();
+            var left = d["mean"]["0"] - attr.width / 2;
+            var top = d["mean"]["1"] - attr.height / 2;
+            return "translate(" + left + "," + top + ")";
+        })
+        .style("pointer-events", "none");
+}
+
 Heatmap.prototype.draw = function (data) {
 
     var _self = this;
 
-    _self.data = data["content"];
+    _self.data = data["content"]["layout"];
 
     var progress = data["absolute-progress"];
 
@@ -178,9 +272,11 @@ Heatmap.prototype.draw = function (data) {
 
         Feedback.updateProgressBar(_self, progress);
 
+        _self.drawClusters(data);
+
         var domain = d3.extent(_self.data, function (p) {
-            if (p["content"] != 0) {
-                return p["content"];
+            if (p["content"]["density"] != 0) {
+                return p["content"]["density"];
             }
         });
 
@@ -254,10 +350,10 @@ Heatmap.prototype.draw = function (data) {
             .attr("width", _self.width / _self.bin2DCols)
             .attr("height", _self.height / _self.bin2DRows)
             .attr("fill", function (d, i) {
-                if (d["content"] == 0) {
+                if (d["content"]["density"] == 0) {
                     return "white";
                 }
-                return _self.heatmapColorScale(d["content"]);
+                return _self.heatmapColorScale(d["content"]["density"]);
 
             })
             .attr("stroke", "white")
@@ -270,7 +366,28 @@ Heatmap.prototype.draw = function (data) {
                 console.log("mouseenter");
                 this.hoverStart = Date.now();
             })
+            .on("mouseleave", function () {
+                console.log("mouseleave");
+
+                _self.svg.selectAll(".label").style("display", "block");
+
+
+                this.hoverStart = Date.now();
+                _self.svg.selectAll(".block")
+                    .attr("fill", function (d, i) {
+                        if (d["content"]["density"] == 0) {
+                            return "white";
+                        }
+                        return _self.heatmapColorScale(d["content"]["density"]);
+                    }).attr("stroke-width", 1).attr("stroke", "white");
+
+                d3.select("#keywordDiv").remove();
+            })
             .on("mouseover", function (d, i) {
+
+                _self.svg.selectAll(".label").style("display", "none");
+
+
                 if (Date.now() - this.hoverStart < 1000) {
                     console.log("mouseover");
                     return;
@@ -285,18 +402,18 @@ Heatmap.prototype.draw = function (data) {
 
                 _self.svg.selectAll(".block")
                     .attr("fill", function (d, i) {
-                        if (d["content"] == 0) {
+                        if (d["content"]["density"] == 0) {
                             return "white";
                         }
-                        return _self.heatmapColorScale(d["content"]);
+                        return _self.heatmapColorScale(d["content"]["density"]);
                     }).attr("stroke-width", 1).attr("stroke", "white");
 
                 d3.select(this).attr("stroke-width", 10)
                     .attr("stroke", function (d, i) {
-                        if (d["content"] == 0) {
+                        if (d["content"]["density"] == 0) {
                             return "white";
                         }
-                        return _self.heatmapColorScale(d["content"]);
+                        return _self.heatmapColorScale(d["content"]["density"]);
 
                     });
 
@@ -317,18 +434,18 @@ Heatmap.prototype.draw = function (data) {
 
                 _self.svg.selectAll(".block")
                     .attr("fill", function (d, i) {
-                        if (d["content"] == 0) {
+                        if (d["content"]["density"] == 0) {
                             return "white";
                         }
-                        return _self.heatmapColorScale(d["content"]);
+                        return _self.heatmapColorScale(d["content"]["density"]);
                     }).attr("stroke-width", 1).attr("stroke", "white");
 
                 d3.select(this).attr("stroke-width", 10)
                     .attr("stroke", function (d, i) {
-                        if (d["content"] == 0) {
+                        if (d["content"]["density"] == 0) {
                             return "white";
                         }
-                        return _self.heatmapColorScale(d["content"]);
+                        return _self.heatmapColorScale(d["content"]["density"]);
 
                     });
 
@@ -355,10 +472,10 @@ Heatmap.prototype.draw = function (data) {
             .attr("width", _self.width / _self.bin2DCols)
             .attr("height", _self.height / _self.bin2DRows)
             .attr("fill", function (d, i) {
-                if (d["content"] == 0) {
+                if (d["content"]["density"] == 0) {
                     return "white";
                 }
-                return _self.heatmapColorScale(d["content"]);
+                return _self.heatmapColorScale(d["content"]["density"]);
             })
             .attr("stroke-width", 1)
             .attr("cell", function (d) {
@@ -382,6 +499,8 @@ Heatmap.prototype.draw = function (data) {
                 .text("Tweets organized based on similarity in a heatmap");
 
         }
+        _self.drawLabels(data);
+
     }
 }
 

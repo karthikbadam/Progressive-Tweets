@@ -17,7 +17,7 @@ var emotionValues = new Array(emotions.length);
 
 var popularUsers = d3.map();
 
-var colors = ["244,109,67", "254,196,79", "166,217,106", "77,77,77"];
+var colors = ["244,165,130", "240,240,240", "166,219,160", "77,77,77"];
 
 var sentiments = [];
 
@@ -104,7 +104,9 @@ $(document).ready(function () {
     registerHandlers("spatial content", function (cache) {
 
         if (textScatter == null) {
-            textScatter = new Heatmap({});
+            textScatter = new Heatmap({
+                name: "layout"
+            });
         }
 
         textScatter.draw(cache);
@@ -157,16 +159,31 @@ $(document).ready(function () {
 
     });
 
-    // Create Tweet List
-    list = new List();
+    registerHandlers("bounce content", function (cache) {
 
-    // Create sentiment bar chart
-    sentimentBar = new Bar({
-        emotions: emotions
+        socket.send(wrapMessage("request text", {content: cache, chunkSize: 10}));
+        socket.send(wrapMessage("request sentiment", {content: cache, chunkSize: 50}));
+        socket.send(wrapMessage("request user", {content: cache, chunkSize: 50}));
+        socket.send(wrapMessage("request layout", {content: cache, chunkSize: 200}));
+
+    });
+
+
+    // Create Tweet List
+    list = new List({
+        name: "file"
     });
 
     // Create sentiment bar chart
-    userBar = new HorizontalBar();
+    sentimentBar = new Bar({
+        emotions: emotions,
+        name: "sentiment"
+    });
+
+    // Create sentiment bar chart
+    userBar = new HorizontalBar({
+        name: "user"
+    });
 
 
     // create common buttons
@@ -191,19 +208,25 @@ function CommonButtons() {
         .style("margin-left", "0px");
 }
 
-CommonButtons.prototype.pause = function () {
+CommonButtons.prototype.pause = function (safe) {
 
     var _self = this;
     _self.pauseFlag = !_self.pauseFlag;
 
-    socket.send(wrapMessage("pause interface", ""));
+    socket.send(wrapMessage("pause interface", "all"));
 
-    list.pause();
-    sentimentBar.pause();
-    userBar.pause();
+    if (safe) {
+        // just pause everything
+    } else {
+        list.pause();
+        sentimentBar.pause();
+        userBar.pause();
 
-    if (textScatter != null)
-        textScatter.pause();
+        if (textScatter != null)
+            textScatter.pause();
+    }
+
+
 
     if (_self.pauseFlag) {
         _self.miniControlDiv.select("#pause").style("background-image", 'url("/images/play.png")');

@@ -6,6 +6,8 @@ function Bar(options) {
 
     var _self = this;
 
+    _self.name = options.name;
+
     var parentDiv = _self.parentDiv = "sentimentDiv";
 
     _self.emotions = options.emotions;
@@ -106,6 +108,7 @@ function Bar(options) {
 
 Bar.prototype.pause = function () {
     var _self = this;
+    socket.send(wrapMessage("pause interface", _self.name));
     _self.pauseFlag = !_self.pauseFlag;
     if (_self.pauseFlag) {
         _self.miniControlDiv.select("#pause").style("background-image", 'url("/images/play.png")');

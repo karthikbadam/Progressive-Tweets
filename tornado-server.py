@@ -24,6 +24,7 @@ from sklearn.manifold import TSNE
 from sklearn.manifold import MDS
 from sklearn.feature_extraction.text import TfidfVectorizer
 from sklearn.metrics.pairwise import linear_kernel
+from sklearn.cluster import KMeans
 
 import nltk
 from nltk import ngrams
@@ -72,7 +73,7 @@ distanceTexts = np.zeros([1, 1])
 ## Global variables for NLTK stuff
 stopset = stopwords.words('english')
 freq_words = ['http', 'https', 'amp', 'com', 'co', 'th', 'textdebate', 'debate', 'mccain', 'obama', 'gopdebate',
-              'gopdebates', 'rt']
+              'gopdebates', 'rt', '__', 'gopdebate_']
 for i in freq_words:
     stopset.append(i)
 
@@ -138,7 +139,6 @@ def analyzeTopic():
     corpus = [dictionary.doc2bow(text) for text in textCorpus]
 
     ldamodel = gensim.models.ldamodel.LdaModel(corpus, num_topics=3, id2word=dictionary, passes=60)
-
     print 'Topics are'
 
     topics = []
@@ -150,153 +150,116 @@ def analyzeTopic():
     # send('topics information', topics)
 
 
-
-
 ## Alternatively there are seperate functions for all four methods and they are called seperately?
 @gen.coroutine
-def handlePlayHead(playHead, lineNumber, chunkSize, client):
-    ## -------------------------------------
-    ## For when the play head is changed
-    counter = 0
-    chunkCounter = 0
-    cache = []
-    chunkBytes = 0
-    while playHead < lineNumber:
-        print(playHead)
-        counter += 1
-        cache.append(contentCache[playHead - 1])
-        chunkBytes += contentCache[playHead - 1]["bytes"]
-        if counter % chunkSize == 1 and counter >= chunkSize:
-            chunkCounter += 1
+def handlePlayHead(data, client):
+    print "\n-------------------------------------------------------" + str(data["content"])
+    target = data["content"]["target"]
 
-            message = {}
-            message["id"] = chunkCounter
-            message["content"] = cache
-            message["absolute-progress"] = {
-                "current": playHead,
-                "total": totalLines
-            }
+    changedComputation = fileReading
+    if fileReading.name == target:
+        fileReading.set_playhead(data["content"]["value"])
+        changedComputation = fileReading
+    if sentimentAnalysis.name == target:
+        sentimentAnalysis.set_playhead(data["content"]["value"])
+        changedComputation = sentimentAnalysis
+    if userPopularity.name == target:
+        userPopularity.set_playhead(data["content"]["value"])
+        changedComputation = userPopularity
 
-            if fileReading.playHeadChanged:
-                fileReading.send_content(contentCache[playHead - 1], client)
+    changedComputation.flush(client)
+    changedComputation.playHeadChanged = True
+    for content in contentCache[
+                   changedComputation.playHead - 1: changedComputation.playHead + changedComputation.chunkSize - 1]:
+        changedComputation.send_data(content, client)
+        changedComputation.playHead += 1
 
-            if sentimentAnalysis.playHeadChanged:
-                sentimentAnalysis.send_content(contentCache[playHead - 1], client)
+    changedComputation.reset_playhead()
+    changedComputation.playHeadChanged = False
 
-            if sentimentAnalysis.playHeadChanged:
-                sentimentAnalysis.send_content(contentCache[playHead - 1], client)
+    ## pause on the server if not paused already
 
-            cache = []
-            chunkBytes = 0
 
-        time.sleep(0.01)
-        playHead += 1
-        ## -------------------------------------
+def tfidfText (textContent):
+    texts = []
+    for t in textContent:
+        texts.append(t["content"])
+    tfidf = TfidfVectorizer(max_features=len(textContent)*2,
+                            min_df=1,
+                            stop_words=stopset)
+    tfs = tfidf.fit_transform(texts)
+    scores = zip(tfidf.get_feature_names(),
+                 np.asarray(tfs.sum(axis=0)).ravel())
+    sortedWordScores = sorted(scores, key=lambda x: x[1], reverse=True)
+    returnData = {}
+    for word in sortedWordScores:
+        returnData[str(word[0])] = word[1]
+    return returnData
+
+@gen.coroutine
+def readTextData(data, client):
+    index = data["content"]
+    if sentimentAnalysis.pauseInterface:
+        logger.info(sentimentAnalysis.name + " paused")
+        fileReading.collect_data_when_paused(contentCache[index])
+    else:
+        fileReading.set_chunksize(data["chunkSize"])
+        fileReading.set_progress(absProgress=index + 1, absProgressLimit=totalLines, absTimeLeft=5)
+        fileReading.send_data(contentCache[index], client, handler=tfidfText)
+
+
+@gen.coroutine
+def readSentimentData(data, client):
+    index = data["content"]
+    if sentimentAnalysis.pauseInterface:
+        logger.info(sentimentAnalysis.name + " paused")
+        sentimentAnalysis.collect_data_when_paused(contentCache[index])
+    else:
+        sentimentAnalysis.set_chunksize(data["chunkSize"])
+        sentimentAnalysis.set_progress(absProgress=index + 1, absProgressLimit=totalLines, absTimeLeft=5)
+        sentimentAnalysis.send_data(contentCache[index], client)
+
+
+@gen.coroutine
+def readUserData(data, client):
+    index = data["content"]
+    if userPopularity.pauseInterface:
+        logger.info(userPopularity.name + " paused")
+        userPopularity.collect_data_when_paused(contentCache[index])
+    else:
+        userPopularity.set_chunksize(data["chunkSize"])
+        userPopularity.set_progress(absProgress=index + 1, absProgressLimit=totalLines, absTimeLeft=5)
+        userPopularity.send_data(contentCache[index], client)
 
 
 ## Currently for csv files or tsv files
 @gen.coroutine
 def readFileProgressive(data, client):
     global totalLines
-    global playHead
 
     filename = data["content"]
-    chunkSize = data["chunkSize"]
-    counter = 0
-    cache = []
     colnames = ""
-    chunkCounter = 0
 
     totalSize = os.path.getsize("public/data/" + filename)
     bytesRead = 0.0
-
-    lineNumber = 1
+    linesRead = 0
+    lineNumber = 0
 
     fileReading.start_collection()
     sentimentAnalysis.start_collection()
     userPopularity.start_collection()
 
+    fileReading.set_chunksize(data["chunkSize"])
+
     with open("public/data/" + filename, 'r') as infile:
         for line in infile:
-            if counter == 0:
+            if lineNumber == 0:
                 colnames = line.strip().split("\t")
                 totalSize = totalSize - sys.getsizeof(line)
-                counter = 1
+                lineNumber = 1
             else:
-
                 while pauseInterface:
                     logger.info("system paused")
-
-                # ## -------------------------------------
-                # ## For when the revert operation is selected
-                # counter2 = 0
-                # chunkCounter2 = 0
-                # cache2 = []
-                # chunkBytes2 = 0
-                # while playHead > 0 and revertInterface:
-                #     cache2.append(contentCache[playHead - 1])
-                #     chunkBytes2 += contentCache[playHead - 1]["bytes"]
-                #     if counter2 % chunkSize == 1 and counter2 >= chunkSize:
-                #         chunkCounter2 += 1
-                #
-                #         message = {}
-                #         message["id"] = chunkCounter2
-                #         message["content"] = cache2
-                #         message["absolute-progress"] = {
-                #             "current": playHead,
-                #             "total": totalLines,
-                #             "relative": chunkBytes2
-                #         }
-                #
-                #         client.send_message("file content", message)
-                #         client.send_message("sentiment content", message)
-                #         client.send_message("user content", message)
-                #
-                #         cache2 = []
-                #         chunkBytes2 = 0
-                #
-                #     time.sleep(0.005)
-                #     playHead += 1
-                # ## -------------------------------------
-                #
-                # ## -------------------------------------
-                # ## For when the forward operation is selected
-                # counter2 = 0
-                # chunkCounter2 = 0
-                # cache2 = []
-                # chunkBytes2 = 0
-                # while playHead < lineNumber:
-                #     cache2.append(contentCache[playHead - 1])
-                #     chunkBytes2 += contentCache[playHead - 1]["bytes"]
-                #     if counter2 % chunkSize == 1 and counter2 >= chunkSize:
-                #         chunkCounter2 += 1
-                #
-                #         message = {}
-                #         message["id"] = chunkCounter2
-                #         message["content"] = cache2
-                #         message["absolute-progress"] = {
-                #             "current": playHead,
-                #             "total": totalLines,
-                #             "relative": chunkBytes2
-                #         }
-                #
-                #         client.send_message("file content", message)
-                #         client.send_message("sentiment content", message)
-                #         client.send_message("user content", message)
-                #
-                #         cache2 = []
-                #         chunkBytes2 = 0
-                #
-                #     time.sleep(0.005)
-                #     playHead += 1
-                # ## -------------------------------------
-                #
-                # ## -------------------------------------
-                # ## For when the stop operation is selected
-                # while stopInterface == True:
-                #     playHead = 1
-                #
-                # ## -------------------------------------
 
                 bytesRead = bytesRead + len(line)
                 linesRead = lineNumber
@@ -311,8 +274,8 @@ def readFileProgressive(data, client):
                 textDatumOut = {}
                 textDatumOut["id"] = lineNumber - 1
                 textSentimentVader = vaderSentiment(textDatum[textContentCol])
-                textDatumOut["sentiment"] = "Positive" if textSentimentVader["compound"] > 0.25 else "Negative" if \
-                    textSentimentVader["compound"] < -0.25 else "Neutral"
+                textDatumOut["sentiment"] = "Positive" if textSentimentVader["compound"] > 0.33 else "Negative" if \
+                    textSentimentVader["compound"] < -0.33 else "Neutral"
                 textDatumOut["content"] = textDatum[textContentCol]
                 textDatumOut["author"] = textDatum[authorNameCol]
                 textDatumOut["textId"] = textDatum["id"]
@@ -322,61 +285,28 @@ def readFileProgressive(data, client):
                 if len(contentCache) < lineNumber:
                     contentCache.append(textDatumOut)
 
-                fileReading.setProgress(absProgress=linesRead, absProgressLimit=totalLines,  absTimeLeft=5)
-                sentimentAnalysis.setProgress(absProgress=linesRead, absProgressLimit=totalLines,  absTimeLeft=5)
-                userPopularity.setProgress(absProgress=linesRead, absProgressLimit=totalLines,  absTimeLeft=5)
+                # if (fileReading.pauseInterface):
+                #     fileReading.collect_data_when_paused(textDatumOut)
+                # else:
+                #     fileReading.set_progress(absProgress=linesRead, absProgressLimit=totalLines, absTimeLeft=5)
+                #     fileReading.send_data(textDatumOut, client)
 
-                fileReading.send_data(textDatumOut, client)
-                sentimentAnalysis.send_data(textDatumOut, client)
-                userPopularity.send_data(textDatumOut, client)
-
-                # cache.append({"content": textDatumOut["content"],
-                #               "sentiment": textDatumOut["sentiment"],
-                #               "author": textDatumOut["author"],
-                #               "textId": textDatumOut["textId"],
-                #               "id": counter - 1})
-
-                counter = counter + 1
-
-                # compute distance2
+                # compute distance between the tweets at the same time
                 if lineNumber == 1:
                     distanceTexts[0][0] = 0
                 else:
                     if lineNumber > distanceTexts.shape[0]:
                         distanceTexts.resize(totalLines, totalLines)
                     for i, ctext in enumerate(contentCache):
-                        # distance2[lineNumber - 1][i] = jaccard(ctext["keywords"], textDatumOut["keywords"])
-                        # distance2[lineNumber - 1][i] = semantic(ctext["syncset"], textDatumOut["syncset"])
                         distanceTexts[lineNumber - 1][i] = semantic(ctext["keywords"], textDatumOut["keywords"])
                         distanceTexts[i][lineNumber - 1] = distanceTexts[lineNumber - 1][i]
                     distanceTexts[lineNumber - 1][lineNumber - 1] = 0
 
-                # if counter % chunkSize == 1 and counter >= chunkSize:
-                #     chunkCounter = chunkCounter + 1
-                #
-                #     message = {}
-                #     message["id"] = chunkCounter
-                #     message["content"] = cache
-                #     message["absolute-progress"] = {
-                #         "current": linesRead,
-                #         "total": totalLines,
-                #         "relative": chunkBytes
-                #     }
-                #
-                #     client.send_message("file content", message)
-                #     client.send_message("sentiment content", message)
-                #     client.send_message("user content", message)
-                #
-                #     cache = []
-                #     counter = 1
-                #     chunkBytes = 0
-
-                time.sleep(0.05)
-
+                client.send_message("bounce content", lineNumber - 1)
+                time.sleep(fileReading.speed)
                 lineNumber += 1
-                playHead += 1
 
-    totalLines = linesRead
+        totalLines = linesRead
 
 
 def slicetexts(data):
@@ -387,23 +317,6 @@ def slicetexts(data):
 
 def tokenizetexts(data):
     return generateKeywords(data["content"])
-
-
-def jaccard(list1, list2):
-    ## lemmatize before finding jaccard distance
-    # for i in range(0, len(list1)):
-    #     list1[i] = wordnetLemmatizer.lemmatize(list1[i])
-    #     list1[i] = stemmer.stem(list1[i])
-    #
-    # for i in range(0, len(list2)):
-    #     list2[i] = wordnetLemmatizer.lemmatize(list2[i])
-    #     list2[i] = stemmer.stem(list2[i])
-
-    set_1 = set(list1)
-    set_2 = set(list2)
-    similarity = len(set_1.intersection(set_2)) / float(len(set_1.union(set_2)))
-
-    return 1.0 - similarity
 
 
 wordToSet = {}
@@ -487,7 +400,7 @@ def layoutGenerationProgressive(data, client):
         while pauseInterface:
             logger.info("system paused")
 
-        layouts = []
+
 
         # group points into bins to create a heatmap
         # each has 1/100 size of the total width or height
@@ -528,21 +441,80 @@ def layoutGenerationProgressive(data, client):
             })
             contentCache[i]["location"] = l
 
+        clusterPoints = []
+
         # flatten the layout matrix
         for i in range(0, bin2DRows):
             for j in range(0, bin2DCols):
                 if matrix[i][j]["density"] != 0:
-                    datum = {}
-                    datum["row"] = i
-                    datum["col"] = j
-                    datum["content"] = matrix[i][j]["density"]
-                    layouts.append(datum)
+                    point = []
+                    point.append(i)
+                    point.append(j)
+                    clusterPoints.append(point)
+
+        ## Apply k-means
+        print "Applying K-means"
+        nClusters = 7
+        kmeans = KMeans(n_clusters=nClusters, random_state=1, verbose=2)
+        labels = kmeans.fit_predict(clusterPoints)
+        clusterCenters = kmeans.cluster_centers_
+
+
+        layouts = []
+        for index, point in enumerate(clusterPoints):
+            i = point[0]
+            j = point[1]
+            datum = {}
+            datum["row"] = i
+            datum["col"] = j
+            datum["content"] = {
+                "label": int(""+str(labels[index])),
+                "density": matrix[i][j]["density"]
+            }
+            layouts.append(datum)
+
+
+        clusters = []
+        clusterTexts = []
+        for i in range(0, nClusters):
+            clusters.append({})
+            clusters[i]["points"] = []
+            clusters[i]["keywords"] = []
+            clusterTexts.append([])
+
+
+        for point in layouts:
+            label = point["content"]["label"]
+            datum = {}
+            datum["row"] = point["row"]
+            datum["col"] = point["col"]
+            clusters[label]["points"].append(datum)
+            for p in matrix[datum["row"]][datum["col"]]["points"]:
+                clusterTexts[label].append(contentCache[p["id"]]["content"])
+
+
+        for i in range(0, nClusters):
+            tfidf = TfidfVectorizer(max_features=100,
+                                    min_df=1,
+                                    ngram_range=(1, 2),
+                                    stop_words=stopset)
+            tfs = tfidf.fit_transform(clusterTexts[i])
+            scores = zip(tfidf.get_feature_names(),
+                         np.asarray(tfs.sum(axis=0)).ravel())
+            sortedWordScores = sorted(scores, key=lambda x: x[1], reverse=True)
+            for word in sortedWordScores:
+                clusters[i]["keywords"].append({
+                    "word": str(word[0]),
+                    "score": word[1]
+                })
+                clusters[i]["center"] = {
+                    "row": round(clusterCenters[i][0]),
+                    "col": round(clusterCenters[i][1])}
+
 
         returnData = {}
-        returnData["content"] = layouts
-
+        returnData["content"] = {"layout": layouts, "clusters": clusters}
         layoutCache = matrix
-
         returnData["absolute-progress"] = {
             "current": layoutPacketCounter,
             "total": totalLines,
@@ -598,10 +570,20 @@ def keywordDistribution(message):
 def handleEvent(client, event, message):
     global pauseInterface
     global playHead
+    global contentCache
 
     logger.info("event " + str(event))
     if event == "request file":
         future = thread_pool.submit(readFileProgressive, message, client)
+
+    if event == "request text":
+        future = thread_pool.submit(readTextData, message, client)
+
+    if event == "request sentiment":
+        future = thread_pool.submit(readSentimentData, message, client)
+
+    if event == "request user":
+        future = thread_pool.submit(readUserData, message, client)
 
     if event == "request layout":
         future = thread_pool.submit(layoutGenerationProgressive, message, client)
@@ -648,16 +630,28 @@ def handleEvent(client, event, message):
         client.send_message("keyword content", message)
 
     if event == "pause interface":
-        # target = message["content"]
-        if pauseInterface:
-            pauseInterface = False
+        target = message
+        print "\n Pause triggered " + sentimentAnalysis.name + " " + str(message) + "\n"
+        if target == "all":
+            pauseInterface = False if pauseInterface else True
         else:
-            pauseInterface = True
+            changedComputation = fileReading
+            if fileReading.name == target:
+                changedComputation = fileReading
+            if sentimentAnalysis.name == target:
+                changedComputation = sentimentAnalysis
+            if userPopularity.name == target:
+                changedComputation = userPopularity
+            if layoutComputation.name == target:
+                changedComputation = layoutComputation
+            changedComputation.pause()
 
     if event == "change playhead":
-        print "\n-------------------------------------------------------" + str(message["content"])
-        target = message["content"]["target"]
-        playHead = message["content"]["value"]
+        if layoutComputation.name == message["content"]["target"]:
+            layoutComputation.set_playhead(message["content"]["value"])
+            layoutComputation.pause()
+        else:
+            future = thread_pool.submit(handlePlayHead, message, client)
 
 
 class SocketHandler(tornado.websocket.WebSocketHandler):
@@ -681,15 +675,6 @@ class SocketHandler(tornado.websocket.WebSocketHandler):
         if self in clients:
             logger.info("Connection closed")
             clients.remove(self)
-
-    def send_message_to_all(self, event, message):
-        to_send = wrapMessage(event, message)
-        for c in clients:
-            c.write_message(message)
-
-    def send_message_to_one(self, client, event, message):
-        to_send = wrapMessage(event, message)
-        client.write_message(to_send)
 
     @gen.coroutine
     def send_message(self, event, message):

@@ -207,7 +207,7 @@ List.prototype.draw = function (cache, override) {
             var min = 10000000000000;
             _self.listIDStack.forEach(function (l, i) {
                 var datum = _self.listDataStack[i];
-                var processed = (new Date(datum["time"])).getTime() - (new Date(textData["time"])).getTime();
+                var processed = (new Date(textData["time"])).getTime() - (new Date(datum["time"])).getTime();
                 if (processed > 0 && processed < min) {
                     min = processed;
                     minIndex = "#" + l;

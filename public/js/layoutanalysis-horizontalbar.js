@@ -18,7 +18,78 @@ function HorizontalBar(options) {
     _self.stopFlag = false;
     _self.pauseFlag = false;
 
-    Feedback.addControlMinimize(parentDiv, _self);
+
+    _self.measureArray = [];
+    _self.measures = {};
+
+    //chunk size
+    var measure = {
+        min: 5,
+        max: 200,
+        default: 100,
+        name: "Chunk Size",
+        index: "chunkSize",
+        step: 5,
+        value: 100
+    }
+    _self.measureArray.push(measure);
+    _self.measures[measure["index"]] = measure;
+
+    //updates
+    var measure = {
+        min: 1,
+        max: 10,
+        default: 1,
+        name: "Waiting time (Sec)",
+        index: "updates",
+        step: 1,
+        value: 1
+    }
+    _self.measureArray.push(measure);
+    _self.measures[measure["index"]] = measure;
+
+    _self.optionsArray = [];
+    _self.options = {};
+
+    var option = {
+        name: "Absolute Progress",
+        index: "absolute",
+        children: [
+            {
+                name: "Tweets Read",
+                index: "lines"
+            },
+            {
+                name: "Bytes Read",
+                index: "bytes"
+            }
+        ]
+    }
+
+    _self.optionsArray.push(option);
+    _self.options[option["index"]] = option["children"][0]["index"];
+
+    var option = {
+        name: "Relative Progress",
+        index: "relative",
+        children: [
+            {
+                name: "User Similarity",
+                index: "diversity"
+            },
+            {
+                name: "Speed",
+                index: "speed"
+            },
+        ]
+    }
+
+    _self.optionsArray.push(option);
+    _self.options[option["index"]] = option["children"][0]["index"];
+
+    if (!controlInterface) {
+        Feedback.addControlMinimize(parentDiv, _self);
+    }
 
     var margin = {
             top: 25,
@@ -42,7 +113,7 @@ function HorizontalBar(options) {
 
     _self.highest = 5;
 
-    var xAxis = _self.xAxis = d3.axisTop(x).ticks(5, ",d").tickSizeInner(-height)
+    var xAxis = _self.xAxis = d3.axisTop(x).ticks(4, ",d").tickSizeInner(-height)
         .tickSizeOuter(0)
         .tickPadding(10);
 
@@ -54,22 +125,23 @@ function HorizontalBar(options) {
         .append("g")
         .attr("transform", "translate(" + margin.left + "," + margin.top + ")");
 
-    svg.append("g")
+    _self.xElement = svg.append("g")
         .attr("class", "x axis")
         .attr("transform", "translate(0,0)")
         .call(xAxis)
-        .style("font-size", "12px")
-        .append("text")
-        .attr("x", width - 50)
-        .attr("dy", "-.71em")
-        .style("font-size", "15px")
-        .style("text-anchor", "end")
-        .text("#Tweets");
+        .style("font-size", "10px");
 
-    svg.append("g")
+    _self.yElement = svg.append("g")
         .attr("class", "y axis")
         .style("font-size", "12px")
         .call(yAxis);
+
+    svg.append("text")
+        .attr("x", width - 50)
+        .attr("y", 0)
+        .style("font-size", "12px")
+        .style("text-anchor", "end")
+        .text("#Tweets");
 }
 
 
@@ -111,25 +183,11 @@ HorizontalBar.prototype.highlight = function (cache) {
 
     var chunkId = cache["id"];
     var progress = cache["absolute-progress"];
-    var tweetChunk = cache["content"];
+    var uData = cache["users"];
 
-    _self.selectedUsers = d3.map();
+    _self.selectedUsers = d3.entries(uData);
 
-    tweetChunk.forEach(function (tweetData, i) {
-
-        // counting the tweets
-        if (_self.selectedUsers.has(tweetData["author"])) {
-
-            _self.selectedUsers.set(tweetData["author"], _self.selectedUsers.get(tweetData["author"]) + 1);
-
-        } else {
-
-            _self.selectedUsers.set(tweetData["author"], 1);
-        }
-
-    });
-
-    _self.selectedUsersData = _self.selectedUsers.entries().sort(function (a, b) {
+    _self.selectedUsersData = _self.selectedUsers.sort(function (a, b) {
 
         if (a.value == b.value) {
             return (a.key < b.key) ? -1 : (a.key > b.key) ? 1 : 0;
@@ -142,13 +200,13 @@ HorizontalBar.prototype.highlight = function (cache) {
 
     });
 
-    var selectedAuthors = _self.selectedUsersData.map(function (d) {
+    _self.selectedUsersData = _self.selectedUsersData
+        .slice(_self.selectedUsersData.length - Math.floor(_self.height / 15), _self.selectedUsersData.length);
+
+
+    _self.y.domain(_self.selectedUsersData.map(function (d) {
         return d.key;
-    });
-
-    selectedAuthors = selectedAuthors.concat(_self.y.domain()).reverse();
-
-    _self.y.domain(selectedAuthors.slice(selectedAuthors.length -  Math.floor(_self.height / 15), selectedAuthors.length));
+    }));
 
     var max = d3.max(_self.selectedUsersData, function (d) {
         return d.value;
@@ -173,7 +231,7 @@ HorizontalBar.prototype.highlight = function (cache) {
 
             return _self.y(d.key);
         })
-        .attr("height", _self.y.bandwidth())
+        .attr("height",  _self.y.bandwidth())
         .attr("x", function (d) {
             return 0;
         })
@@ -210,28 +268,15 @@ HorizontalBar.prototype.highlight = function (cache) {
     selection.exit().transition().duration(10).remove();
 }
 
-HorizontalBar.prototype.draw = function (cache) {
+HorizontalBar.prototype.draw = function (cache, override) {
 
     var _self = this;
 
-    var chunkId = cache["id"];
-    var progress = cache["absolute-progress"];
-    var tweetChunk = cache["content"];
+    var uData = cache["processed"];
 
-    tweetChunk.forEach(function (tweetData, i) {
+    _self.popularUsers = d3.entries(uData);
 
-        // counting the tweets
-        if (_self.popularUsers.has(tweetData["author"])) {
-
-            _self.popularUsers.set(tweetData["author"], _self.popularUsers.get(tweetData["author"]) + 1);
-
-        } else {
-            _self.popularUsers.set(tweetData["author"], 1);
-        }
-
-    });
-
-    _self.popularUsersData = _self.popularUsers.entries().sort(function (a, b) {
+    _self.popularUsersData = _self.popularUsers.sort(function (a, b) {
 
         if (a.value == b.value) {
             return (a.key < b.key) ? -1 : (a.key > b.key) ? 1 : 0;
@@ -244,16 +289,16 @@ HorizontalBar.prototype.draw = function (cache) {
 
     });
 
-    _self.popularUsersData =  _self.popularUsersData
-        .slice(_self.popularUsersData.length -  Math.floor(_self.height / 15), _self.popularUsersData.length);
+    _self.popularUsersData = _self.popularUsersData
+        .slice(_self.popularUsersData.length - Math.floor(_self.height / 15), _self.popularUsersData.length);
 
-    if (!_self.pauseFlag) {
+    if (!_self.pauseFlag || override) {
 
-        Feedback.updateProgressBar(_self, progress);
+        if (Object.keys(cache).indexOf("progress-histories") >= 0) {
 
-        _self.y.domain(_self.popularUsersData.map(function (d) {
-            return d.key;
-        }));
+            Feedback.updateProgressBar(_self, cache["absolute-progress"], cache["progress-histories"]);
+
+        }
 
         var max = d3.max(_self.popularUsersData, function (d) {
             return d.value;
@@ -264,53 +309,100 @@ HorizontalBar.prototype.draw = function (cache) {
 
         }
 
-        _self.x.domain([0, _self.highest]);
+        var xdomain0 = _self.x.domain();
+        var xdomain1 = [0, _self.highest];
 
         _self.xAxis.ticks(_self.highest > 5 ? 5 : _self.highest);
 
-        _self.svg.select(".x.axis").call(_self.xAxis);
+        _self.xElement.transition()
+            .duration(100)
+            .tween("axis", function (d, i) {
+                var i = d3.interpolate(xdomain0, xdomain1);
+                return function (t) {
+                    _self.x.domain(i(t));
+                    _self.xElement.call(_self.xAxis);
+                }
+            })
+            .on("end", function () {
 
-        _self.yAxis = d3.axisLeft(_self.y);
+                var ydomain0 = _self.y.domain();
+                var ydomain1 = _self.popularUsersData.map(function (d) {
+                    return d.key;
+                });
 
-        _self.svg.select(".y.axis").call(_self.yAxis);
+                _self.y.domain(ydomain1);
+                _self.yElement.call(_self.yAxis);
 
-        var selection = _self.svg.selectAll(".bar")
-            .data(_self.popularUsersData, function (d, i) {
-                return d.key;
+                var selection = _self.svg.selectAll(".bar")
+                    .data(_self.popularUsersData, function (d, i) {
+                        return d.key;
+                    });
+
+                selection
+                    .attr("y", function (d, i) {
+                        return _self.y(d.key);
+                    })
+                    .attr("height", _self.y.bandwidth())
+                    .attr("width", function (d) {
+                        return _self.x(d.value);
+                    });
+
+                selection.enter()
+                    .append("rect")
+                    .attr("class", "bar")
+                    .attr("y", function (d, i) {
+
+                        return _self.y(d.key);
+                    })
+                    .attr("height", _self.y.bandwidth())
+                    .attr("x", function (d) {
+                        return 0;
+                    })
+                    .attr("width", function (d) {
+                        return _self.x(d.value);
+                    })
+                    .style("fill", function (d, i) {
+                        return "#EEE";
+                    })
+                    .style("stroke", function (d, i) {
+                        return "#222";
+                    })
+                    .style("fill-opacity", 1);
+
+                selection.exit().remove();
+
+                // _self.yElement.transition()
+                //     .duration(100)
+                //     .tween("axis", function (d, i) {
+                //
+                //         // _self.y.domain(ydomain1);
+                //         // _self.yElement.call(_self.yAxis);
+                //
+                //         // var i = d3.interpolate(ydomain0, ydomain1);
+                //         return function (t) {
+                //             _self.y.domain(i(t));
+                //             _self.yElement.call(_self.yAxis);
+                //         }
+                //     })
+                //     .on("end", function () {
+                //
+                //
+                //     })
             });
 
-        selection
-            .attr("y", function (d, i) {
-                return _self.y(d.key);
-            })
-            .attr("height", _self.y.bandwidth())
-            .attr("width", function (d) {
-                return _self.x(d.value);
-            });
+        //_self.x.domain([0, _self.highest]);
 
-        selection.enter()
-            .append("rect")
-            .attr("class", "bar")
-            .attr("y", function (d, i) {
+        // _self.y.domain(_self.popularUsersData.map(function (d) {
+        //     return d.key;
+        // }));
 
-                return _self.y(d.key);
-            })
-            .attr("height", _self.y.bandwidth())
-            .attr("x", function (d) {
-                return 0;
-            })
-            .attr("width", function (d) {
-                return _self.x(d.value);
-            })
-            .style("fill", function (d, i) {
-                return "#EEE";
-            })
-            .style("stroke", function (d, i) {
-                return "#222";
-            })
-            .style("fill-opacity", 1);
+        //_self.svg.select(".x.axis").call(_self.xAxis);
 
-        selection.exit().remove();
+        //_self.yAxis = d3.axisLeft(_self.y);
+
+        //_self.svg.select(".y.axis").call(_self.yAxis);
+
+
     }
 
 }

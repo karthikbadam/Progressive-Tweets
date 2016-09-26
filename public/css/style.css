@@ -2,6 +2,7 @@
 body, .container-fluid {
     height: 100%;
     min-height: 100%;
+    font-family: "Helvetica", "Roboto", sans-serif !important;
 }
 
 #content {
@@ -29,7 +30,7 @@ body, .container-fluid {
 
 #content-middle {
     padding: 0px 0px;
-    width: 20%;
+    width: 15%;
     height: 100%;
     display: inline-block;
     float: left;
@@ -39,7 +40,7 @@ body, .container-fluid {
 }
 
 #content-right {
-    width: 49%;
+    width: 54%;
     height: 100%;
     float: left;
     margin-left: 2px;
@@ -48,13 +49,13 @@ body, .container-fluid {
 
 #sentimentDiv {
     width: 100%;
-    height: 50%;
+    height: 40%;
     position: relative;
 }
 
 #userDiv {
     width: 100%;
-    height: 50%;
+    height: 60%;
     position: relative;
 }
 
@@ -109,38 +110,99 @@ body, .container-fluid {
     height: 30px;
 }
 
-#title {
+#pagetitle {
     float: left;
     line-height: 28px;
 }
 
-#title span{
+#pagetitle span {
     padding-left: 10px;
     font-size: 20px;
 }
 
-#common-buttons{
+#common-buttons {
     width: auto;
     height: auto;
 }
 
-
 .lasso path {
-  stroke: rgb(80,80,80);
-  stroke-width:2px;
+    stroke: rgb(80, 80, 80);
+    stroke-width: 2px;
 }
 
 .lasso .drawn {
-  fill-opacity:.05 ;
+    fill-opacity: .05;
 }
 
 .lasso .loop_close {
-  fill:none;
-  stroke-dasharray: 4,4;
+    fill: none;
+    stroke-dasharray: 4, 4;
 }
 
 .lasso .origin {
-  fill:#3399FF;
-  fill-opacity:.5;
+    fill: #3399FF;
+    fill-opacity: .5;
 }
 
+.getmdl-select .mdl-icon-toggle__label {
+    float: right;
+    margin-top: -30px;
+    color: rgba(0, 0, 0, 0.4)
+}
+
+.getmdl-select.is-focused .mdl-icon-toggle__label {
+    color: #3f51b5
+}
+
+.getmdl-select .mdl-menu__container {
+    width: 100% !important;
+    overflow-y: auto;
+    overflow-x: hidden
+}
+
+.getmdl-select .mdl-menu__container .mdl-menu .mdl-menu__item {
+    font-size: 16px
+}
+
+.getmdl-select__fullwidth .mdl-menu {
+    width: 100%
+}
+
+.getmdl-select__fix-height .mdl-menu__container {
+    max-height: 300px !important
+}
+
+.flasher {
+    animation: blink 1s infinite;
+}
+
+@keyframes blink {
+    0% {
+        opacity: 0
+    }
+    15%, 70% {
+        opacity: 1
+    }
+    85%, 100% {
+        opacity: 0
+    }
+}
+
+#contentcontent-left {
+    overflow: scroll;
+}
+
+#contentcontent-left::-webkit-scrollbar {
+    -webkit-appearance: none;
+    width: 1px;
+}
+
+#contentcontent-left::-webkit-scrollbar-thumb {
+    border-radius: 2px;
+    background-color: rgba(0, 0, 0, .1);
+    -webkit-box-shadow: 0 0 1px rgba(255, 255, 255, .2);
+}
+
+.textContent {
+    background-color: rgba(240, 240, 240,1);
+}

@@ -4,14 +4,21 @@
 
 var socket;
 
+
+var controlInterface = false;
+
+//var dataFile = "hillary.txt";
+// var dataFile = "trump.txt";
 //var dataFile = "general_debate2008.txt";
-var dataFile = "republican_debate2016.txt";
+//var dataFile = "republican_debate2016.txt";
+//var dataFile = "candidate-tweets-random.txt";
+var dataFile = "hillarybernie.txt";
 
 var sentimentBar, userBar, textScatter, list = null;
 
 var commonButtons = null;
 
-var emotions = ["Negative",  "Neutral", "Positive"];
+var emotions = ["Negative", "Neutral", "Positive"];
 
 var emotionValues = new Array(emotions.length);
 
@@ -65,7 +72,6 @@ $(document).ready(function () {
     //     return "You should keep this page open.";
     // });
 
-
     registerHandlers("topic content", function (cache) {
 
         // var cache = JSON.parse(cache);
@@ -109,7 +115,12 @@ $(document).ready(function () {
             });
         }
 
-        textScatter.draw(cache);
+        textScatter.draw(cache, true);
+
+        if (Object.keys(cache).indexOf("pause") >= 0 && !textScatter.pauseFlag) {
+            textScatter.pause();
+        }
+
 
     });
 
@@ -127,7 +138,7 @@ $(document).ready(function () {
             commonButtons.pause();
         }
 
-        textScatter.drawKeywords(cache["content"], true);
+        textScatter.drawKeywords(cache["keywordsSentiment"]);
 
         // process users into an array
         userBar.highlight(cache);
@@ -143,31 +154,170 @@ $(document).ready(function () {
 
     registerHandlers("file content", function (cache) {
 
-        list.draw(cache);
+        list.draw(cache, true);
+
+        if (Object.keys(cache).indexOf("pause") >= 0 && !list.pauseFlag) {
+            list.pause();
+        }
 
     });
 
     registerHandlers("sentiment content", function (cache) {
 
-        sentimentBar.draw(cache);
+        sentimentBar.draw(cache, true);
+
+        if (Object.keys(cache).indexOf("pause") >= 0 && !sentimentBar.pauseFlag) {
+            sentimentBar.pause();
+        }
 
     });
 
     registerHandlers("user content", function (cache) {
 
-        userBar.draw(cache);
+        userBar.draw(cache, true);
+
+        if (Object.keys(cache).indexOf("pause") >= 0 && !userBar.pauseFlag) {
+            userBar.pause();
+        }
 
     });
+
+    registerHandlers("bounce text", function (cache) {
+
+        socket.send(wrapMessage("request text", {
+            content: cache["lineNumber"],
+            abs: list.options["absolute"],
+            rel: list.options["relative"],
+            chunkSize: cache["totalLines"]
+        }));
+
+    });
+
+    registerHandlers("bounce sentiment", function (cache) {
+
+        socket.send(wrapMessage("request sentiment", {
+            content: cache["lineNumber"],
+            abs: sentimentBar.options["absolute"],
+            rel: sentimentBar.options["relative"],
+            chunkSize: cache["totalLines"]
+        }));
+
+    });
+
+    registerHandlers("bounce user", function (cache) {
+
+        socket.send(wrapMessage("request user", {
+            content: cache["lineNumber"],
+            abs: userBar.options["absolute"],
+            rel: userBar.options["relative"],
+            chunkSize: cache["totalLines"]
+        }));
+
+    });
+
+    function handlingControlInterface(cache) {
+
+        socket.send(wrapMessage("request text", {
+            content: cache - 1,
+            abs: list.options["absolute"],
+            rel: list.options["relative"],
+            chunkSize: cache
+        }));
+
+
+        socket.send(wrapMessage("request sentiment", {
+            content: cache - 1,
+            abs: sentimentBar.options["absolute"],
+            rel: sentimentBar.options["relative"],
+            chunkSize: cache
+        }));
+
+        socket.send(wrapMessage("request user", {
+            content: cache - 1,
+            abs: userBar.options["absolute"],
+            rel: userBar.options["relative"],
+            chunkSize: cache
+        }));
+
+        socket.send(wrapMessage("request layout", {
+            content: cache - 1,
+            chunkSize: cache,
+            clusters: 5,
+            abs: "lines",
+            rel: "quality",
+            perplexity: 30,
+            iterations: 200
+        }));
+
+    }
 
     registerHandlers("bounce content", function (cache) {
 
-        socket.send(wrapMessage("request text", {content: cache, chunkSize: 10}));
-        socket.send(wrapMessage("request sentiment", {content: cache, chunkSize: 50}));
-        socket.send(wrapMessage("request user", {content: cache, chunkSize: 50}));
-        socket.send(wrapMessage("request layout", {content: cache, chunkSize: 200}));
+        if (controlInterface) {
+
+            handlingControlInterface(cache);
+            return;
+        }
+
+        setTimeout(function () {
+            socket.send(wrapMessage("request text", {
+                content: cache,
+                abs: list.options["absolute"],
+                rel: list.options["relative"],
+                chunkSize: list.measures["chunkSize"]["value"]
+            }));
+        }, 5 * list.measures["updates"]["value"]);
+
+        setTimeout(function () {
+            socket.send(wrapMessage("request sentiment", {
+                content: cache,
+                abs: sentimentBar.options["absolute"],
+                rel: sentimentBar.options["relative"],
+                chunkSize: sentimentBar.measures["chunkSize"]["value"]
+            }));
+        }, 5 * sentimentBar.measures["updates"]["value"]);
+
+        setTimeout(function () {
+            socket.send(wrapMessage("request user", {
+                content: cache,
+                abs: userBar.options["absolute"],
+                rel: userBar.options["relative"],
+                chunkSize: userBar.measures["chunkSize"]["value"]
+            }));
+        }, 5 * userBar.measures["updates"]["value"]);
+
+        //userBar.measures["updates"]["value"]
+
+        if (textScatter) {
+
+            setTimeout(function () {
+                socket.send(wrapMessage("request layout", {
+                    content: cache,
+                    abs: textScatter.options["absolute"],
+                    rel: textScatter.options["relative"],
+                    chunkSize: textScatter.measures["chunkSize"]["value"],
+                    clusters: textScatter.measures["clusters"]["value"],
+                    perplexity: textScatter.measures["perplexity"]["value"],
+                    iterations: textScatter.measures["iterations"]["value"]
+                }));
+            }, 5 * textScatter.measures["updates"]["value"]);
+
+            //textScatter.measures["updates"]["value"]
+
+        } else {
+            socket.send(wrapMessage("request layout", {
+                content: cache,
+                chunkSize: 100,
+                clusters: 5,
+                abs: "lines",
+                rel: "quality",
+                perplexity: 30,
+                iterations: 200
+            }));
+        }
+
 
     });
-
 
     // Create Tweet List
     list = new List({
@@ -185,9 +335,14 @@ $(document).ready(function () {
         name: "user"
     });
 
+    if (textScatter == null) {
+        textScatter = new Heatmap({
+            name: "layout"
+        });
+    }
 
     // create common buttons
-    commonButtons = new  CommonButtons();
+    commonButtons = new CommonButtons();
 
 });
 
@@ -225,7 +380,6 @@ CommonButtons.prototype.pause = function (safe) {
         if (textScatter != null)
             textScatter.pause();
     }
-
 
 
     if (_self.pauseFlag) {

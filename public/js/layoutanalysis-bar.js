@@ -18,7 +18,6 @@ function Bar(options) {
         _self.emotionValues[i] = 0;
     }
 
-
     _self.selectedEmotions = null;
 
     _self.highest = 10;
@@ -28,8 +27,77 @@ function Bar(options) {
     _self.stopFlag = false;
     _self.pauseFlag = false;
 
-    Feedback.addControlMinimize(parentDiv, _self);
+    _self.measureArray = [];
+    _self.measures = {};
 
+    //chunk size
+    var measure = {
+        min: 5,
+        max: 200,
+        default: 100,
+        name: "Chunk Size",
+        index: "chunkSize",
+        step: 5,
+        value: 100
+    };
+    _self.measureArray.push(measure);
+    _self.measures[measure["index"]] = measure;
+
+    //updates
+    var measure = {
+        min: 1,
+        max: 10,
+        default: 1,
+        name: "Waiting time (Sec)",
+        index: "updates",
+        step: 1,
+        value: 1
+    };
+    _self.measureArray.push(measure);
+    _self.measures[measure["index"]] = measure;
+
+    _self.optionsArray = [];
+    _self.options = {};
+
+    var option = {
+        name: "Absolute Progress",
+        index: "absolute",
+        children: [
+            {
+                name: "Tweets Read",
+                index: "lines"
+            },
+            {
+                name: "Bytes Read",
+                index: "bytes"
+            }
+        ]
+    }
+
+    _self.optionsArray.push(option);
+    _self.options[option["index"]] = option["children"][0]["index"];
+
+    var option = {
+        name: "Relative Progress",
+        index: "relative",
+        children: [
+            {
+                name: "Sentiment Consistency",
+                index: "confidence"
+            },
+            {
+                name: "Speed",
+                index: "speed"
+            }
+        ]
+    }
+    _self.optionsArray.push(option);
+    _self.options[option["index"]] = option["children"][0]["index"];
+
+
+    if (!controlInterface) {
+        Feedback.addControlMinimize(parentDiv, _self);
+    }
     var margin = {
             top: 15,
             right: 5,
@@ -72,11 +140,13 @@ function Bar(options) {
         .style("font-size", "12px")
         .call(xAxis);
 
-    svg.append("g")
+    _self.yElement = svg.append("g")
         .attr("class", "y axis")
         .call(yAxis)
-        .style("font-size", "12px")
-        .append("text")
+        .style("font-size", "12px");
+
+
+    svg.append("text")
         .attr("transform", "rotate(-90)")
         .attr("y", 6)
         .attr("dy", ".71em")
@@ -151,6 +221,13 @@ Bar.prototype.highlight = function (cache) {
         _self.selectedEmotions[i] = 0;
     }
 
+    var sData = cache["sentiments"];
+
+    Object.keys(sData).forEach(function (key) {
+        _self.selectedEmotions[_self.emotions.indexOf(key)] = sData[key];
+    });
+
+
     tweetChunk.forEach(function (tweetData, i) {
 
         // Processing the rating
@@ -174,25 +251,13 @@ Bar.prototype.highlight = function (cache) {
     _self.yAxis.ticks(max > 10 ? 10 : max);
     _self.svg.select(".y.axis").transition().duration(100).delay(500).call(_self.yAxis);
 
-    _self.bars
-        .attr("height", function (d) {
-            return _self.height - _self.y(d);
-        })
-        .style("fill", function (d, i) {
-            return "rgb(200, 200, 200)";
-        })
-        .style("stroke", function (d, i) {
-            return "transparent";
-        })
-        .style("fill-opacity", 0.1);
 
-    var selectedBars = _self.selectedBars = _self.svg.selectAll(".selectedBar")
+    var bars = _self.bars = _self.svg.selectAll(".bar")
         .data(_self.selectedEmotions);
 
-    _self.selectedBars
-        .enter()
+    _self.bars.enter()
         .append("rect")
-        .attr("class", "selectedBar")
+        .attr("class", "bar")
         .transition().duration(10)
         .attr("x", function (d, i) {
             return _self.x(_self.emotions[i]);
@@ -212,8 +277,10 @@ Bar.prototype.highlight = function (cache) {
         })
         .style("fill-opacity", 0.5);
 
-    _self.selectedBars
-        .transition().duration(10)
+    _self.bars
+        .transition().delay(function (d, i) {
+        return i * 100;
+    }).duration(20)
         .attr("x", function (d, i) {
             return _self.x(_self.emotions[i]);
         })
@@ -232,41 +299,77 @@ Bar.prototype.highlight = function (cache) {
         })
         .style("fill-opacity", 0.5);
 
-    _self.selectedBars.exit().remove();
+    _self.bars.exit().remove();
+
+    // var selectedBars = _self.selectedBars = _self.svg.selectAll(".selectedBar")
+    //     .data(_self.selectedEmotions);
+    //
+    // _self.selectedBars
+    //     .enter()
+    //     .append("rect")
+    //     .attr("class", "selectedBar")
+    //     .transition().duration(10)
+    //     .attr("x", function (d, i) {
+    //         return _self.x(_self.emotions[i]);
+    //     })
+    //     .attr("width", _self.x.bandwidth())
+    //     .attr("y", function (d) {
+    //         return _self.y(d);
+    //     })
+    //     .attr("height", function (d) {
+    //         return _self.height - _self.y(d);
+    //     })
+    //     .style("fill", function (d, i) {
+    //         return "rgb(" + colors[i] + ")";
+    //     })
+    //     .style("stroke", function (d, i) {
+    //         return "#222";
+    //     })
+    //     .style("fill-opacity", 0.5);
+    //
+    // _self.selectedBars
+    //     .transition().duration(10)
+    //     .attr("x", function (d, i) {
+    //         return _self.x(_self.emotions[i]);
+    //     })
+    //     .attr("width", _self.x.bandwidth())
+    //     .attr("y", function (d) {
+    //         return _self.y(d);
+    //     })
+    //     .attr("height", function (d) {
+    //         return _self.height - _self.y(d);
+    //     })
+    //     .style("fill", function (d, i) {
+    //         return "rgb(" + colors[i] + ")";
+    //     })
+    //     .style("stroke", function (d, i) {
+    //         return "#222";
+    //     })
+    //     .style("fill-opacity", 0.5);
+    //
+    // _self.selectedBars.exit().remove();
 }
 
-Bar.prototype.draw = function (cache) {
+Bar.prototype.draw = function (cache, override) {
 
     var _self = this;
 
-    var progress = cache["absolute-progress"];
-    var tweetChunk = cache["content"];
+    var sData = cache["processed"];
 
-    tweetChunk.forEach(function (tweetData, i) {
-
-        // Processing the rating
-        var ratingValue = tweetData["sentiment"];
-
-        if (!isNaN(ratingValue) && parseInt(ratingValue) > 0) {
-
-            _self.emotionValues[parseInt(ratingValue) - 1]++;
-
-        } else if (isNaN(ratingValue) && _self.emotions.indexOf(ratingValue) >= 0) {
-            //means its a string
-            _self.emotionValues[_self.emotions.indexOf(ratingValue)]++;
-        }
+    Object.keys(sData).forEach(function (key) {
+        _self.emotionValues[_self.emotions.indexOf(key)] = sData[key];
     });
 
+    if (!_self.pauseFlag || override) {
 
-    if (!_self.pauseFlag) {
+        if (Object.keys(cache).indexOf("progress-histories") >= 0) {
 
-        if (progress) {
-            Feedback.updateProgressBar(_self, progress);
+            Feedback.updateProgressBar(_self, cache["absolute-progress"], cache["progress-histories"]);
         }
 
-        if (_self.svg.selectAll(".selectedBar")) {
-            _self.svg.selectAll(".selectedBar").remove();
-        }
+        // if (_self.svg.selectAll(".selectedBar")) {
+        //     _self.svg.selectAll(".selectedBar").remove();
+        // }
 
         var max = d3.max(_self.emotionValues, function (d) {
             return d;
@@ -274,61 +377,73 @@ Bar.prototype.draw = function (cache) {
 
         if (max >= _self.highest) {
             _self.highest = 2 * max;
-
         }
+
+        //_self.yElement = _self.svg.select(".y.axis").call(_self.yAxis);
 
         _self.yAxis.ticks(max > 10 ? 10 : max);
 
-        _self.y.domain([0, _self.highest]);
+        var domain0 = _self.y.domain();
+        var domain1 = [0, _self.highest];
 
-        _self.svg.select(".y.axis").call(_self.yAxis);
+        _self.yElement.transition().duration(400).tween("axis", function (d, i) {
+            var i = d3.interpolate(domain0, domain1);
+            return function (t) {
+                _self.y.domain(i(t));
+                _self.yElement.call(_self.yAxis);
+            }
+        }).on("end", function () {
+            var bars = _self.bars = _self.svg.selectAll(".bar")
+                .data(_self.emotionValues);
 
-        var bars = _self.bars = _self.svg.selectAll(".bar")
-            .data(_self.emotionValues);
+            _self.bars.enter()
+                .append("rect")
+                .attr("class", "bar")
+                .attr("x", function (d, i) {
+                    return _self.x(_self.emotions[i]);
+                })
+                .attr("width", _self.x.bandwidth())
+                .attr("y", function (d) {
+                    return _self.y(d);
+                })
+                .attr("height", function (d) {
+                    return _self.height - _self.y(d);
+                })
+                .style("fill", function (d, i) {
+                    return "rgb(" + colors[i] + ")";
+                })
+                .style("stroke", function (d, i) {
+                    return "#222";
+                })
+                .style("fill-opacity", 0.5);
 
-        _self.bars.enter()
-            .append("rect")
-            .attr("class", "bar")
-            .transition().duration(10)
-            .attr("x", function (d, i) {
-                return _self.x(_self.emotions[i]);
-            })
-            .attr("width", _self.x.bandwidth())
-            .attr("y", function (d) {
-                return _self.y(d);
-            })
-            .attr("height", function (d) {
-                return _self.height - _self.y(d);
-            })
-            .style("fill", function (d, i) {
-                return "rgb(" + colors[i] + ")";
-            })
-            .style("stroke", function (d, i) {
-                return "#222";
-            })
-            .style("fill-opacity", 0.5);
+            _self.bars
+                .transition()
+                .delay(function (d, i) {
+                    return 500 + i * 200;
+                })
+                .attr("x", function (d, i) {
+                    return _self.x(_self.emotions[i]);
+                })
+                .attr("width", _self.x.bandwidth())
+                .attr("y", function (d) {
+                    return _self.y(d);
+                })
+                .attr("height", function (d) {
+                    return _self.height - _self.y(d);
+                })
+                .style("fill", function (d, i) {
+                    return "rgb(" + colors[i] + ")";
+                })
+                .style("stroke", function (d, i) {
+                    return "#222";
+                })
+                .style("fill-opacity", 0.5);
 
-        _self.bars
-            .transition().duration(10)
-            .attr("x", function (d, i) {
-                return _self.x(_self.emotions[i]);
-            })
-            .attr("width", _self.x.bandwidth())
-            .attr("y", function (d) {
-                return _self.y(d);
-            })
-            .attr("height", function (d) {
-                return _self.height - _self.y(d);
-            })
-            .style("fill", function (d, i) {
-                return "rgb(" + colors[i] + ")";
-            })
-            .style("stroke", function (d, i) {
-                return "#222";
-            })
-            .style("fill-opacity", 0.5);
+            _self.bars.exit().remove();
 
-        _self.bars.exit().remove();
+        });
+
 
         // data.forEach(function (d, i) {
         //     _self.svg.append("line")

@@ -19,13 +19,13 @@ var Feedback = {
 
         //create progress svg
         _self.progressCurrentSvg = _self.progressCurrentDiv.append("svg")
-            .style("background-color", "#EEE")
+            .style("background-color", "white")
             .attr("width", progressWidth)
             .attr("height", progressHeight);
 
         _self.progressCurrentSvgDefs = _self.progressCurrentSvg.append("defs")
             .append("linearGradient")
-            .attr("id", "temperature-gradient")
+            .attr("id", "temperature-gradient" + divID)
             .attr("gradientUnits", "objectBoundingBox");
 
         _self.progressDrag = d3.drag()
@@ -48,8 +48,20 @@ var Feedback = {
             d3.select(this).attr("x", d3.event.x - 10);
             _self.playHead.attr("x", d3.event.x);
 
-            var playHeadIndex = Math.round(d3.event.x * _self.currentProgress["total"] / _self.currentProgress["current"]);
+            var playHeadIndex = Math.round(d3.event.x * _self.currentProgress["total"] / _self.progressWidth);
+            playHeadIndexCopy = playHeadIndex;
+            min = 100000;
+            minIndex = playHeadIndex;
 
+            //closest progress index
+            _self.progressHistories.forEach(function (p) {
+                if (Math.abs(playHeadIndexCopy - p["current"]) < min) {
+                    min = Math.abs(playHeadIndexCopy - p["current"]);
+                    minIndex = p["current"];
+                }
+            });
+
+            playHeadIndex = minIndex;
             console.log(playHeadIndex);
 
             socket.send(wrapMessage("change playhead", {
@@ -57,14 +69,24 @@ var Feedback = {
             }));
 
             if (Math.abs(_self.currentProgress["current"] - playHeadIndex) < 20) {
-                if (commonButtons.pauseFlag) {
-                    commonButtons.pause(safe=true);
+                if (_self.pauseFlag) {
+                    _self.pause();
                 }
             }
 
-            if (!commonButtons.pauseFlag) {
-                commonButtons.pause(safe=true);
-            }
+            // if (!_self.pauseFlag) {
+            //     _self.pause();
+            // }
+
+            // if (Math.abs(_self.currentProgress["current"] - playHeadIndex) < 20) {
+            //     if (commonButtons.pauseFlag) {
+            //         commonButtons.pause(safe = true);
+            //     }
+            // }
+            //
+            // if (!commonButtons.pauseFlag) {
+            //     commonButtons.pause(safe = true);
+            // }
         }
 
         _self.tweetContentDiv = d3.select('#' + divID).append("div")
@@ -73,24 +95,53 @@ var Feedback = {
             .style("height", ($('#' + divID).height() - progressHeight - 2) + "px")
             .style("width", "100%")
             .style("display", "inline-block")
-            .style("overflow", "hidden")
+            .style("overflow", "scroll")
             .style("position", "relative");
 
         _self.progressHistories = [];
 
+        var flasher = _self.progressCurrentSvg.selectAll(".flasher").data([1]);
+
+        flasher.enter().append("rect").attr("class", "flasher")
+            .attr("x", 0)
+            .attr("y", 0)
+            .attr("width", _self.progressWidth * 100 / 13000)
+            .attr("height", _self.progressHeight)
+            .style("fill", "#EEE")
+            .style("fill-opacity", 0.5)
+            .style("pointer-events", "none");
+
+        flasher.exit().remove();
+
+        flasher.attr("x", 0)
+            .attr("y", 0)
+            .attr("width", _self.progressWidth * 100 / 13000)
+            .attr("height", _self.progressHeight);
+
+
         return "content" + divID;
     },
 
-    updateProgressBar: function (context, progress) {
+    updateProgressBar: function (context, progress, progressHistories) {
         var _self = context;
 
         if (progress == null) {
             return;
         }
 
-        _self.progressHistories.push(progress);
+        if (progressHistories) {
+            _self.progressHistories = progressHistories;
+        }
 
         _self.currentProgress = progress;
+
+        _self.progressHistories.unshift({
+            "current": 0,
+            "total": _self.progressHistories[0]["total"],
+            "relative": _self.progressHistories[0]["relative"]
+        });
+
+        d3.select("#pagetitle span").text("Tweet Analytics ("+ (progress["current"] + 1) + " records)");
 
         _self.progressColorScale = d3.scaleLinear()
             .domain(d3.extent(_self.progressHistories, function (p) {
@@ -99,47 +150,87 @@ var Feedback = {
 
         _self.pWidth = _self.progressWidth / progress["total"] < 1 ? 1 : _self.progressWidth / progress["total"];
 
-        _self.progressCurrentSvg.select("#gradient-end").remove();
+        _self.progressY = d3.scaleLinear()
+            .domain(d3.extent(_self.progressHistories, function (p) {
+                return p["relative"];
+            })).range([_self.progressHeight - 2, 1]);
 
-        var gradientBars = _self.progressCurrentSvg.select("#temperature-gradient")
-            .selectAll("stop")
-            .data(_self.progressHistories);
+        if (_self.progressHistories.length == 2) {
+            _self.progressY.domain([0.5 * progress["relative"], 1.5 * progress["relative"]])
+        }
 
-        gradientBars.enter().append("stop")
-            .attr("offset", function (d) {
-                return d["current"] / d["total"];
+        _self.progressline = d3.line()
+            .x(function (d) {
+                return _self.progressWidth * (d["current"]) / d["total"];
             })
-            .attr("stop-color", function (d) {
-                return _self.progressColorScale(d["relative"]);
-            });
-
-        gradientBars.exit().remove();
-
-        gradientBars
-            .attr("offset", function (d) {
-                return d["current"] / d["total"];
+            .y(function (d) {
+                return _self.progressY(d["relative"]);
             })
-            .attr("stop-color", function (d) {
-                return _self.progressColorScale(d["relative"]);
-            });
+            .curve(d3.curveCardinal.tension(0.75));
 
-        _self.progressCurrentSvg.select("#temperature-gradient").append("stop")
-            .attr("id", "gradient-end")
-            .attr("offset", function (d) {
-                return (progress["current"] + 10) / progress["total"];
-            })
-            .attr("stop-color", function (d) {
-                return "#EEE";
-            });
+        // _self.progressCurrentSvg.select("#gradient-end").remove();
+        //
+        // var gradientBars = _self.progressCurrentSvg.select("#temperature-gradient" + _self.parentDiv)
+        //     .selectAll("stop")
+        //     .data(_self.progressHistories);
+        //
+        // gradientBars.enter().append("stop")
+        //     .attr("offset", function (d) {
+        //         return d["current"] / d["total"];
+        //     })
+        //     .attr("stop-color", function (d) {
+        //         return _self.progressColorScale(d["relative"]);
+        //     });
+        //
+        // gradientBars.exit().remove();
+        //
+        // gradientBars
+        //     .attr("offset", function (d) {
+        //         return d["current"] / d["total"];
+        //     })
+        //     .attr("stop-color", function (d) {
+        //         return _self.progressColorScale(d["relative"]);
+        //     });
+        //
+        // _self.progressCurrentSvg.select("#temperature-gradient" + _self.parentDiv).append("stop")
+        //     .attr("id", "gradient-end")
+        //     .attr("offset", function (d) {
+        //         return (progress["current"] + 10) / progress["total"];
+        //     })
+        //     .attr("stop-color", function (d) {
+        //         return "#EEE";
+        //     });
+
+        // _self.progressCurrentSvg.select(".progress")
+        //     .attr("width", progress["current"] * _self.progressWidth / progress["total"]);
+
+        if (_self.progressCurrentSvg.select("#" + _self.parentDiv + "progresspath").empty()) {
+            _self.progresspath = _self.progressCurrentSvg.append("path")
+                .attr("id", _self.parentDiv + "progresspath")
+                .attr("class", "progresspath");
+        } else {
+            _self.progresspath = _self.progressCurrentSvg.select("#" + _self.parentDiv + "progresspath");
+        }
+
+        _self.progresspath
+            .data([_self.progressHistories])
+            .attr("d", _self.progressline)
+            .style("fill", "transparent")
+            .style("fill-opacity", 1)
+            .style("stroke", "#666")
+            .style("stroke-width", "1.5px")
+            .style("pointer-events", "none");
+
 
         if (_self.progressCurrentSvg.selectAll(".progress").empty()) {
+
             _self.progressCurrentSvg.append("rect")
                 .attr("class", "progress")
                 .attr("x", 0)
                 .attr("y", 0)
-                .attr("width", _self.progressWidth)
+                .attr("width", 1)
                 .attr("height", _self.progressHeight)
-                .style("fill", "url(#temperature-gradient)")
+                .style("fill", "#EEE")
                 .style("fill-opacity", function (d) {
                     return 0.5;
                 });
@@ -152,7 +243,7 @@ var Feedback = {
                 .attr("stroke-width", 0)
                 .attr("height", _self.progressHeight)
                 .style("pointer-events", "none")
-                .style("fill", "black")
+                .style("fill", "#666")
                 .style("fill-opacity", 1);
 
             _self.playHeadShadow = _self.progressCurrentSvg.append("rect")
@@ -166,6 +257,20 @@ var Feedback = {
                 .style("cursor", "hand")
                 .call(_self.progressDrag)
         }
+
+        _self.progressCurrentSvg.select(".progress")
+            .attr("width", progress["current"] * _self.progressWidth / progress["total"])
+            .attr("height", _self.progressHeight);
+
+        var flasher = _self.progressCurrentSvg.selectAll(".flasher")
+            .data([_self.currentProgress["current"]])
+            .attr("x", _self.progressWidth * (_self.currentProgress["current"]) / _self.currentProgress["total"] + 1)
+            .attr("y", 0)
+            .attr("width", function () {
+                w = _self.progressWidth * _self.measures["chunkSize"]["value"] / _self.currentProgress["total"];
+                return k = w < 10 ? 10 : w;
+            })
+            .attr("height", _self.progressHeight);
 
         _self.playHeadShadow
             .attr("x", _self.progressWidth * (progress["current"]) / progress["total"] - 10);
@@ -218,7 +323,7 @@ var Feedback = {
                 }
             })
             .attr("fill", function (d, i) {
-                return "#222";
+                return "#666";
             })
             .attr("font-size", "9px")
             .style("pointer-events", "none")
@@ -248,13 +353,13 @@ var Feedback = {
             .style("margin-left", "5px")
             .style("margin-top", (_self.progressHeight + 3) + "px");
 
-        _self.miniControlDiv.append("div")
-            .attr("id", "rewind")
-            .attr("class", "minicontrol")
-            .style("background-image", 'url("/images/rewind.png")')
-            .on("click", function () {
-                _self.rewind();
-            });
+        // _self.miniControlDiv.append("div")
+        //     .attr("id", "rewind")
+        //     .attr("class", "minicontrol")
+        //     .style("background-image", 'url("/images/rewind.png")')
+        //     .on("click", function () {
+        //         _self.rewind();
+        //     });
 
         // _self.miniControlDiv.append("div")
         //     .attr("id", "play")
@@ -269,13 +374,13 @@ var Feedback = {
                 _self.pause();
             });
 
-        _self.miniControlDiv.append("div")
-            .attr("id", "forward")
-            .attr("class", "minicontrol")
-            .style("background-image", 'url("/images/forward.png")')
-            .on("click", function () {
-                _self.forward();
-            });
+        // _self.miniControlDiv.append("div")
+        //     .attr("id", "forward")
+        //     .attr("class", "minicontrol")
+        //     .style("background-image", 'url("/images/forward.png")')
+        //     .on("click", function () {
+        //         _self.forward();
+        //     });
 
         _self.miniControlDiv.append("div")
             .attr("id", "stop")
@@ -294,12 +399,12 @@ var Feedback = {
             .on("click", function () {
 
                 if (!_self.expanded) {
-                    $("#" + divID).animate({height: '+=200'});
+                    $("#" + divID).animate({height: '+=170'});
                     _self.expanded = true;
                     Feedback.addControlMaximize(divID, _self);
 
                 } else {
-                    $("#" + divID).animate({height: '-=200'});
+                    $("#" + divID).animate({height: '-=170'});
                     _self.expanded = false;
                     _self.maxControlDiv.style("display", "none");
                 }
@@ -307,9 +412,12 @@ var Feedback = {
 
     },
 
-    addControlMaximize: function (divID, context, measures, options) {
+    addControlMaximize: function (divID, context) {
 
         var _self = context;
+
+        var measures = _self.measureArray;
+        var options = _self.optionsArray;
 
         if (d3.select('#' + divID).select("#maxcontrol" + divID).empty()) {
 
@@ -317,69 +425,142 @@ var Feedback = {
                 .attr("id", "maxcontrol" + divID)
                 .style("background-color", "transparent")
                 .style("width", "100%")
-                .style("height", "200px")
-                .style("display", "inline-block");
+                .style("height", "170px")
+                .style("display", "inline-block")
+                .style("padding", "5px");
 
             _self.measureControlDiv = _self.maxControlDiv.append("div")
                 .attr("id", "measurecontrol" + divID)
                 .style("background-color", "transparent")
                 .style("width", "50%")
-                .style("height", "200px")
+                .style("height", "170px")
                 .style("display", "inline-block");
 
             _self.optionsControlDiv = _self.maxControlDiv.append("div")
                 .attr("id", "optionscontrol" + divID)
                 .style("background-color", "transparent")
                 .style("width", "50%")
-                .style("height", "200px")
+                .style("height", "170px")
                 .style("display", "inline-block");
 
-            _self.measureControlDiv.append("p")
-                .style("width", $("#measurecontrol" + divID).width() + "px")
-                .style("display", "inline")
-                .text("Chunk Size")
-                .append("input")
-                .attr("id", "measureControlSlider-1-" + divID)
-                .attr("class", "mdl-slider mdl-js-slider")
-                .attr("type", "range")
-                .attr("min", "0")
-                .attr("max", "1000")
-                .attr("value", "10")
-                .attr("step", "10");
+            measures.forEach(function (measure) {
 
-            componentHandler.upgradeElement(document.getElementById("measureControlSlider-1-" + divID));
+                    var sliderDiv = _self.measureControlDiv.append("div");
 
-            _self.measureControlDiv.append("p")
-                .style("width", $("#measurecontrol" + divID).width() + "px")
-                .style("display", "inline")
-                .text("Updates per second")
-                .append("input")
-                .attr("id", "measureControlSlider-2-" + divID)
-                .attr("class", "mdl-slider mdl-js-slider")
-                .attr("type", "range")
-                .attr("min", "0")
-                .attr("max", "30")
-                .attr("value", "5")
-                .attr("step", "1");
+                    sliderDiv.append("div")
+                        .attr("id", "slider" + divID + measure["index"])
+                        .style("width", $("#measurecontrol" + divID).width() + "px")
+                        .style("display", "inline-block")
+                        .style("font-size", "0.8em")
+                        .style("margin", "0px")
+                        .style("width", "100%")
+                        .text(measure["name"] + ": " + measure["default"]);
 
-            componentHandler.upgradeElement(document.getElementById("measureControlSlider-2-" + divID));
+                    var sliderContentDiv = sliderDiv.append("div")
+                        .style("display", "inline-block")
+                        .style("font-size", "0.8em");
 
-            _self.measureControlDiv.append("p")
-                .style("width", $("#measurecontrol" + divID).width() + "px")
-                .style("display", "inline")
-                .text("Quality Threshold")
-                .append("input")
-                .attr("id", "measureControlSlider-3-" + divID)
-                .attr("class", "mdl-slider mdl-js-slider")
-                .attr("type", "range")
-                .attr("min", "0")
-                .attr("max", "16")
-                .attr("value", "4")
-                .attr("step", "2");
+                    sliderContentDiv.append("div").style("display", "inline-block").text("" + measure["min"]);
 
-            componentHandler.upgradeElement(document.getElementById("measureControlSlider-3-" + divID));
+                    sliderContentDiv.append("div")
+                        .style("display", "inline-block")
+                        .style("font-size", "0.8em")
+                        .style("width", "calc(100% - 40px)")
+                        .style("margin", "0px")
+                        .append("input")
+                        .attr("id", "measurecontrolslider" + divID + "-" + measure["index"])
+                        .attr("class", "mdl-slider mdl-js-slider")
+                        .style("display", "inline-block")
+                        .attr("type", "range")
+                        .attr("min", "" + measure["min"])
+                        .attr("max", "" + measure["max"])
+                        .attr("value", "" + measure["default"])
+                        .attr("step", "" + measure["step"])
+                        .on("change", function () {
+                            d3.select("#slider" + divID + measure["index"]).text(measure["name"] + ": " + this.value);
+                            _self.measures[measure.index]["value"] = parseInt(this.value);
+                            if (measure.index == "updates") {
+                                _self.measures[measure.index]["value"] = 1000 / parseInt(this.value);
+                            }
+                            if (measure.index == "chunkSize") {
 
-            _self.label1 = _self.optionsControlDiv.append("label")
+                                var flasher = _self.progressCurrentSvg.selectAll(".flasher").data([_self.currentProgress["current"]])
+                                    .attr("x", _self.progressWidth * (_self.currentProgress["current"]) / _self.currentProgress["total"] + 1)
+                                    .attr("y", 0)
+                                    .attr("width", function () {
+                                        w = _self.progressWidth * _self.measures["chunkSize"]["value"] / _self.currentProgress["total"];
+                                        return k = w < 10 ? 10 : w;
+                                    })
+                                    .attr("height", _self.progressHeight);
+
+                            }
+                        });
+
+
+                    sliderContentDiv.append("div").style("display", "inline-block").text("" + measure["max"]);
+                    componentHandler.upgradeElement(document.getElementById("measurecontrolslider" + divID + "-" + measure["index"]));
+                }
+            );
+
+            options.forEach(function (option) {
+
+
+                var optionsDiv = _self.optionsControlDiv.append("div")
+                    .attr("id", "optionscontroldiv" + divID + option["index"])
+                    .attr("class", "mdl-textfield mdl-js-textfield mdl-textfield--floating-label getmdl-select");
+
+                optionsDiv.append("input")
+                    .attr("id", "optionscontrolinput" + divID + option["index"])
+                    .attr("class", "mdl-textfield__input")
+                    .attr("value", option["children"][0]["name"])
+                    .attr("type", "text")
+                    .attr("tabIndex", "-1")
+                    .attr("data-val", _self.options[option["index"]]);
+
+                optionsDiv.append("label")
+                    .attr("class", "mdl-textfield__label")
+                    .text(option["name"]);
+
+                var optionsUl = optionsDiv.append("ul")
+                    .attr("class", "mdl-menu mdl-menu--bottom-left mdl-js-menu")
+                    .attr("for", "optionscontrolinput" + divID + option["index"]);
+
+                option["children"].forEach(function (o) {
+                    optionsUl.append("li").attr("class", "mdl-menu__item")
+                        .attr("data-val", o["index"])
+                        .text(o["name"]);
+                })
+
+                getmdlSelect.init("#optionscontroldiv" + divID + option["index"]);
+
+            });
+
+
+            var optionsDiv = _self.optionsControlDiv.append("div")
+                .attr("id", "optionscontroldiv" + divID + "fake")
+                .attr("class", "mdl-textfield mdl-js-textfield mdl-textfield--floating-label getmdl-select");
+
+            optionsDiv.append("input")
+                .attr("id", "optionscontrolinput" + divID + "fake")
+                .attr("class", "mdl-textfield__input")
+                .attr("value", "Fake")
+                .attr("type", "text")
+                .attr("tabIndex", "-1")
+                .attr("data-val", "fake");
+
+            optionsDiv.append("label")
+                .attr("class", "mdl-textfield__label")
+                .text("fake");
+
+            var optionsUl = optionsDiv.append("ul")
+                .attr("class", "mdl-menu mdl-menu--bottom-left mdl-js-menu")
+                .attr("for", "optionscontrolinput" + divID + "fake");
+
+            getmdlSelect.init("#optionscontroldiv" + divID + "fake");
+
+            d3.select("#optionscontroldiv" + divID + "fake").remove();
+
+            _self.label1 = _self.measureControlDiv.append("label")
                 .attr("for", "chkbox1")
                 .attr("id", "measureControlCheck-1-" + divID)
                 .attr("class", "mdl-checkbox mdl-js-checkbox mdl-js-ripple-effect");
@@ -391,24 +572,25 @@ var Feedback = {
 
             _self.label1.append("span")
                 .attr("class", "mdl-checkbox__label")
+                .style("font-size", "0.8em")
                 .text("Run Online");
 
             componentHandler.upgradeElement(document.getElementById("measureControlCheck-1-" + divID));
 
-            // //Add sliders for measures array -- each measure definition has a range and a default value
-            // measures.forEach(function (measure) {
-            //
-            //     // for each measure create a slider
-            //
-            //
-            // });
-            //
-            // //Add dropdowns for each option menus array -- each option definition has a list of options and a default
-            // options.forEach(function (option) {
-            //
-            //     //for each options menu create a dropdown
-            //
-            // });
+// //Add sliders for measures array -- each measure definition has a range and a default value
+// measures.forEach(function (measure) {
+//
+//     // for each measure create a slider
+//
+//
+// });
+//
+// //Add dropdowns for each option menus array -- each option definition has a list of options and a default
+// options.forEach(function (option) {
+//
+//     //for each options menu create a dropdown
+//
+// });
 
         } else {
 

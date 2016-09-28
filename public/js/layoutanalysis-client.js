@@ -8,11 +8,11 @@ var socket;
 var controlInterface = false;
 
 //var dataFile = "hillary.txt";
-// var dataFile = "trump.txt";
+var dataFile = "trump.txt";
 //var dataFile = "general_debate2008.txt";
 //var dataFile = "republican_debate2016.txt";
 //var dataFile = "candidate-tweets-random.txt";
-var dataFile = "hillarybernie.txt";
+//var dataFile = "hillarybernie.txt";
 
 var sentimentBar, userBar, textScatter, list = null;
 

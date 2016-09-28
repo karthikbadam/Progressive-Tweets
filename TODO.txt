@@ -1,20 +1,20 @@
 Server
-[ ] Change to any other dataset
-[ ] Add legend to the heatmap
-[ ] Highlight current computation with a blinking rectangle
-[ ] Fix the issue with nonsequential points in layout generation
-[ ] Add clustering procedure
-[ ] Features to change speed and frequency of progression
-[ ] Scikit-learn get measures to use for progress
-[ ] Stop a thread using global variable
-[ ] Fix why a new future is not working
 [ ] Reorganize code
-[ ] Still issues with python threads!
+[X] Change to any other dataset
+[X] Add legend to the heatmap
+[X] Highlight current computation with a blinking rectangle
+[X] Fix the issue with nonsequential points in layout generation
+[X] Add clustering procedure
+[X] Features to change speed and frequency of progression
+[X] Scikit-learn get measures to use for progress
+[C] Stop a thread using global variable
+[X] Fix why a new future is not working
+[ ] Issues with python threads!
 
 Client
-[ ] Add sliders and checkboxes for the configuration
+[X] Add sliders and checkboxes for the configuration
 [ ] Rethink the design of the buttons
-[ ] Augment progress bars with distribution information
+[X] Augment progress bars with distribution information
 
 
 

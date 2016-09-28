@@ -10,6 +10,8 @@ from tornado import iostream
 import tornadis
 from concurrent.futures import ProcessPoolExecutor, ThreadPoolExecutor
 from tornado.ioloop import IOLoop
+import copy
+import pickle
 
 import math
 import os.path
@@ -18,6 +20,7 @@ import json
 import logging
 import time
 import re
+import operator
 import numpy as np
 
 from sklearn.manifold import TSNE
@@ -55,15 +58,23 @@ playHead = 1
 contentCache = []
 layoutCache = []
 totalLines = 1
+totalSize = 1
+filename = ""
 # Columns in the text dataset -- republican dataset
-sentimentCol = "sentiment"
-authorNameCol = "name"
-textContentCol = "text"
+# sentimentCol = "sentiment"
+# authorNameCol = "name"
+# textContentCol = "text"
+
 # # Columns in the text dataset -- general dataset
 # sentimentCol = "rating.1"
 # authorNameCol = "author.name"
 # textContentCol = "content"
+# timeCol = "pub.date.GMT"
 
+sentimentCol = "sentiment"
+authorNameCol = "screen_name"
+textContentCol = "text"
+timeCol = "datetime"
 
 ## Global variables for layout computation
 bin2DRows = 80
@@ -72,8 +83,17 @@ distanceTexts = np.zeros([1, 1])
 
 ## Global variables for NLTK stuff
 stopset = stopwords.words('english')
-freq_words = ['http', 'https', 'amp', 'com', 'co', 'th', 'textdebate', 'debate', 'mccain', 'obama', 'gopdebate',
-              'gopdebates', 'rt', '__', 'gopdebate_']
+freq_words = ['http', 'https', 'amp', 'com', 'co', 'th', 'tweetdebate', 'debate', 'mccain', 'obama', 'gopdebate',
+              'gopdebates', 'rt', '__', 'gopdebate_', 'debate', 'debates', "current", "question", "debate08", "gop",
+              "#Hillary2016", "hillary2016", "hillary", "trump2016", "donald", "make", "america", "great", "again", "thanks",
+              "makeamericagreatagain", "president", "get", "put", "em", "us", "go", "cc", "de", "demdebate", "mr", "via", "2016",
+              "say", "see", "many", "let", "new", "00", "16th", "im", "today", "trump", "need", "would", "said", "tedcruz",
+              "realdonaldtrump", "live", "thank", "watch", "like", "ted", "people", "tonight", "today", "cruzcrew", "choosecruz",
+              "country", "answer", "answering", "cruzcountry", "cruzvictory", "campaign", "right", "first", "going", "american", "think",
+              "every", "following", "idpjj"]
+
+user_stop_list = ["realdonaldtrump", "HillaryClinton", "hillaryclinton", "realDonaldTrump", "BernieSanders", "TedCruz", "tedcruz"]
+
 for i in freq_words:
     stopset.append(i)
 
@@ -150,10 +170,224 @@ def analyzeTopic():
     # send('topics information', topics)
 
 
+def lineProgress(chunk):
+    chunk = chunk["content"]
+    progress = {}
+    progress["current"] = chunk[len(chunk) - 1]["id"] + 1
+    progress["total"] = totalLines
+    return progress
+
+
+def bytesProgress(chunk):
+    chunk = chunk["content"]
+    progress = {}
+    bytes = 0
+    for content in chunk:
+        bytes += content["bytes"]
+
+    progress["current"] = bytes
+    progress["total"] = totalSize
+    return progress
+
+
+def speed(chunk):
+    chunk = chunk["content"]
+    bytes = 0
+    for content in chunk:
+        bytes += content["bytes"]
+
+    return bytes/len(chunk)
+
+
+def informationContent(chunk):
+    if "processed" not in chunk:
+        return 0
+
+    keywords = chunk["processed"]
+    keys = keywords.keys()
+    max = 0
+    min = 100
+    newKeywords = 0
+    allkeywords = fileReading.allkeywords
+    for key in keys:
+        if key not in allkeywords:
+            newKeywords+=1
+            fileReading.allkeywords.append(key)
+
+    fileReading.prevScore += abs(newKeywords)/(len(allkeywords) + 0.0)
+    score = fileReading.prevScore
+    return score
+
+    # value = keywords[key]
+    # if value > max:
+    #     max = value
+    # if value < min:
+    #     min = value
+    #return 1 - (max - min)
+
+
+fileReadingSwitcherAbs = {
+    "lines": lineProgress,
+    "bytes": bytesProgress
+}
+
+fileReadingSwitcherRel = {
+    "speed": speed,
+    "information": informationContent
+}
+
+
+def confidence(chunk):
+    chunk = chunk["content"]
+    score = 0
+
+    currentSentiments = {}
+    for t in chunk:
+        if t["sentiment"] in currentSentiments:
+            currentSentiments[t["sentiment"]] += 1
+        else:
+            currentSentiments[t["sentiment"]] = 1
+
+    if len(sentimentAnalysis.chunkHistories) == 0:
+        return 0
+
+    prevSentiments = copy.copy(sentimentAnalysis.chunkHistories[len(sentimentAnalysis.chunkHistories) - 1])
+
+    distance = 0
+    for key in currentSentiments.keys():
+        currentSentiments[key] = 1.0 * currentSentiments[key]/(len(chunk) * 1.0)
+        prevSentiments[key] = 1.0 * prevSentiments[key]/(sentimentAnalysis.progressHistories[len(sentimentAnalysis.chunkHistories) - 1]["current"] * 1.0)
+        distance +=  abs(currentSentiments[key] - prevSentiments[key])
+
+    sentimentAnalysis.prevScore += distance/(len(contentCache)+1.0)
+    return sentimentAnalysis.prevScore
+
+    # for content in chunk:
+    #     s = content["rawsentiment"]
+    #     score += abs(abs(s) - 0.33)
+    # score = score / len(chunk)
+    # print "confidence " + str(score)
+    # return score
+
+
+def userdiversity(chunk):
+    chunk = chunk["content"]
+    authors = []
+    popularObject = dict(
+        sorted(userPopularity.authorAggregates.iteritems(), key=operator.itemgetter(1), reverse=True))
+    popularUsers = popularObject.keys()
+
+    for content in chunk:
+        a = content["author"]
+        if a in popularUsers:
+            authors.append(a)
+
+        # others = re.findall(r'@(\w+)', content["content"])
+        # for o in others:
+        #     if o in popularUsers and o not in authors:
+        #         authors.append(o)
+
+    userPopularity.prevScore += len(authors)/(len(popularUsers)+1.0)
+    #score = (len(authors) + .0)
+    return userPopularity.prevScore
+
+
+sentimentSwitcherAbs = {
+    "lines": lineProgress,
+    "bytes": bytesProgress
+}
+
+sentimentSwitcherRel = {
+    "speed": speed,
+    "confidence": confidence
+}
+
+userSwitcherAbs = {
+    "lines": lineProgress,
+    "bytes": bytesProgress
+}
+
+userSwitcherRel = {
+    "speed": speed,
+    "diversity": userdiversity
+}
+
+
+def tfidfText(textContent):
+    texts = []
+    for t in textContent:
+        currentText = re.sub(r'@(\w+)', "", t["content"])
+        texts.append(currentText)
+
+    if len(textContent) == 0:
+        return {}
+
+    tfidf = TfidfVectorizer(max_features=len(textContent) * 3,
+                            min_df=1,
+                            stop_words=stopset)
+    tfs = tfidf.fit_transform(texts)
+    scores = zip(tfidf.get_feature_names(),
+                 np.asarray(tfs.sum(axis=0)).ravel())
+    sortedWordScores = sorted(scores, key=lambda x: x[1], reverse=True)
+
+    returnData = {}
+    for word in sortedWordScores:
+        returnData[str(word[0])] = word[1]
+    return returnData
+
+
+def sentimentCollector(textContent):
+    returnData = sentimentAnalysis.sentimentAggregates
+
+    if sentimentAnalysis.playHeadChanged:
+        for i, progress in enumerate(sentimentAnalysis.progressHistories):
+            if sentimentAnalysis.playHead == progress["current"]:
+                return sentimentAnalysis.chunkHistories[i]
+
+    for t in textContent:
+        if t["sentiment"] in returnData:
+            returnData[t["sentiment"]] += 1
+        else:
+            returnData[t["sentiment"]] = 1
+
+    return copy.copy(returnData)
+
+
+def userCollector(textContent):
+    returnData = userPopularity.authorAggregates
+
+    if userPopularity.playHeadChanged:
+        for i, progress in enumerate(userPopularity.progressHistories):
+            if userPopularity.playHead == progress["current"]:
+                return userPopularity.chunkHistories[i]
+
+    for t in textContent:
+        if t["author"] in returnData and t["author"] not in user_stop_list:
+            returnData[t["author"]] += 1
+        else:
+            returnData[t["author"]] = 1
+
+        otherUsers = re.findall(r'@(\w+)', t["content"])
+        for user in otherUsers:
+            #if user not in user_stop_list:
+            if user in returnData:
+                returnData[user] += 1
+            else:
+                returnData[user] = 1
+
+    return copy.copy(returnData)
+
+
+handlers = {
+    "file": tfidfText,
+    "sentiment": sentimentCollector,
+    "user": userCollector
+}
+
+
 ## Alternatively there are seperate functions for all four methods and they are called seperately?
 @gen.coroutine
 def handlePlayHead(data, client):
-    print "\n-------------------------------------------------------" + str(data["content"])
     target = data["content"]["target"]
 
     changedComputation = fileReading
@@ -167,43 +401,26 @@ def handlePlayHead(data, client):
         userPopularity.set_playhead(data["content"]["value"])
         changedComputation = userPopularity
 
-    changedComputation.flush(client)
+    changedComputation.flush(client, handler=handlers[target])
     changedComputation.playHeadChanged = True
     for content in contentCache[
                    changedComputation.playHead - 1: changedComputation.playHead + changedComputation.chunkSize - 1]:
-        changedComputation.send_data(content, client)
-        changedComputation.playHead += 1
+        changedComputation.send_data(content, client, handler=handlers[target])
 
     changedComputation.reset_playhead()
     changedComputation.playHeadChanged = False
 
-    ## pause on the server if not paused already
-
-
-def tfidfText (textContent):
-    texts = []
-    for t in textContent:
-        texts.append(t["content"])
-    tfidf = TfidfVectorizer(max_features=len(textContent)*2,
-                            min_df=1,
-                            stop_words=stopset)
-    tfs = tfidf.fit_transform(texts)
-    scores = zip(tfidf.get_feature_names(),
-                 np.asarray(tfs.sum(axis=0)).ravel())
-    sortedWordScores = sorted(scores, key=lambda x: x[1], reverse=True)
-    returnData = {}
-    for word in sortedWordScores:
-        returnData[str(word[0])] = word[1]
-    return returnData
-
 @gen.coroutine
 def readTextData(data, client):
     index = data["content"]
-    if sentimentAnalysis.pauseInterface:
+
+    if fileReading.pauseInterface:
         logger.info(sentimentAnalysis.name + " paused")
         fileReading.collect_data_when_paused(contentCache[index])
     else:
         fileReading.set_chunksize(data["chunkSize"])
+        fileReading.set_absolute(fileReadingSwitcherAbs[data["abs"]])
+        fileReading.set_relative(fileReadingSwitcherRel[data["rel"]])
         fileReading.set_progress(absProgress=index + 1, absProgressLimit=totalLines, absTimeLeft=5)
         fileReading.send_data(contentCache[index], client, handler=tfidfText)
 
@@ -211,31 +428,38 @@ def readTextData(data, client):
 @gen.coroutine
 def readSentimentData(data, client):
     index = data["content"]
+
     if sentimentAnalysis.pauseInterface:
         logger.info(sentimentAnalysis.name + " paused")
         sentimentAnalysis.collect_data_when_paused(contentCache[index])
     else:
         sentimentAnalysis.set_chunksize(data["chunkSize"])
+        sentimentAnalysis.set_absolute(sentimentSwitcherAbs[data["abs"]])
+        sentimentAnalysis.set_relative(sentimentSwitcherRel[data["rel"]])
         sentimentAnalysis.set_progress(absProgress=index + 1, absProgressLimit=totalLines, absTimeLeft=5)
-        sentimentAnalysis.send_data(contentCache[index], client)
-
+        sentimentAnalysis.send_data(contentCache[index], client, handler=sentimentCollector)
 
 @gen.coroutine
 def readUserData(data, client):
     index = data["content"]
+
     if userPopularity.pauseInterface:
         logger.info(userPopularity.name + " paused")
         userPopularity.collect_data_when_paused(contentCache[index])
     else:
         userPopularity.set_chunksize(data["chunkSize"])
+        userPopularity.set_absolute(userSwitcherAbs[data["abs"]])
+        userPopularity.set_relative(userSwitcherRel[data["rel"]])
         userPopularity.set_progress(absProgress=index + 1, absProgressLimit=totalLines, absTimeLeft=5)
-        userPopularity.send_data(contentCache[index], client)
+        userPopularity.send_data(contentCache[index], client, handler=userCollector)
 
 
 ## Currently for csv files or tsv files
 @gen.coroutine
 def readFileProgressive(data, client):
     global totalLines
+    global totalSize
+    global filename
 
     filename = data["content"]
     colnames = ""
@@ -248,6 +472,7 @@ def readFileProgressive(data, client):
     fileReading.start_collection()
     sentimentAnalysis.start_collection()
     userPopularity.start_collection()
+    layoutComputation.start_collection()
 
     fileReading.set_chunksize(data["chunkSize"])
 
@@ -265,6 +490,12 @@ def readFileProgressive(data, client):
                 linesRead = lineNumber
                 totalLines = int(round((linesRead / bytesRead) * totalSize))
 
+                if lineNumber == 1:
+                    fileReading.create_chunk_histories(totalLines)
+                    sentimentAnalysis.create_chunk_histories(totalLines)
+                    userPopularity.create_chunk_histories(totalLines)
+                    layoutComputation.create_chunk_histories(totalLines)
+
                 textDatum = {}
                 values = line.strip().split("\t")
                 for i, value in enumerate(values):
@@ -274,13 +505,15 @@ def readFileProgressive(data, client):
                 textDatumOut = {}
                 textDatumOut["id"] = lineNumber - 1
                 textSentimentVader = vaderSentiment(textDatum[textContentCol])
+                textDatumOut["rawsentiment"] = textSentimentVader["compound"]
                 textDatumOut["sentiment"] = "Positive" if textSentimentVader["compound"] > 0.33 else "Negative" if \
                     textSentimentVader["compound"] < -0.33 else "Neutral"
-                textDatumOut["content"] = textDatum[textContentCol]
+                textDatumOut["content"] = re.sub(r'https?:\/\/.*[\r\n]*', "", re.sub(r'\<U\+(\w+)\>', "", textDatum[textContentCol]))
                 textDatumOut["author"] = textDatum[authorNameCol]
-                textDatumOut["textId"] = textDatum["id"]
-                textDatumOut["keywords"] = tokenizetexts({"content": textDatum[textContentCol]})
+                textDatumOut["textId"] = lineNumber - 1
+                textDatumOut["keywords"] = tokenizetexts({"content": textDatumOut["content"]})
                 textDatumOut["bytes"] = len(line)
+                textDatumOut["time"] = textDatum[timeCol]
 
                 if len(contentCache) < lineNumber:
                     contentCache.append(textDatumOut)
@@ -303,7 +536,7 @@ def readFileProgressive(data, client):
                     distanceTexts[lineNumber - 1][lineNumber - 1] = 0
 
                 client.send_message("bounce content", lineNumber - 1)
-                time.sleep(fileReading.speed)
+                time.sleep(0.004)
                 lineNumber += 1
 
         totalLines = linesRead
@@ -356,14 +589,19 @@ def layoutGenerationProgressive(data, client):
     global layoutCache
     global contentCache
 
-    chunkSize = data["chunkSize"]
+    layoutComputation.set_chunksize(data["chunkSize"])
     layoutPacketCounter = data["content"] + 1
+    perplexity = data["perplexity"]
+    layoutComputation.perplexity = perplexity
+    iterations = data["iterations"]
+    layoutComputation.iterations = iterations
 
     print "total lines is ----------------------------------------------------------- " + str(
         layoutPacketCounter) + " -- " + str(totalLines)
 
-    if (layoutPacketCounter % chunkSize == 0 and layoutPacketCounter >= chunkSize) \
+    if (layoutPacketCounter % layoutComputation.chunkSize == 0 and layoutPacketCounter >= layoutComputation.chunkSize) \
             or layoutPacketCounter == totalLines - 1:
+
 
         # tfidf = TfidfVectorizer().fit_transform(textsCopy)
         # similarities = linear_kernel(tfidf, tfidf)
@@ -373,7 +611,7 @@ def layoutGenerationProgressive(data, client):
         approximate = "pca"
 
         ## if not the first time
-        if layoutPacketCounter > chunkSize:
+        if layoutPacketCounter > layoutComputation.chunkSize:
             approximate = np.zeros([layoutPacketCounter, 2])
             for i in range(0, layoutPacketCounter):
                 if "location" in contentCache[i].keys():
@@ -393,14 +631,36 @@ def layoutGenerationProgressive(data, client):
 
         # number of iterations based on input from the client
         # model = MDS(n_components=2, n_init=1, max_iter=100, verbose=2, dissimilarity="precomputed")
-        model = TSNE(n_components=2, init=approximate, random_state=1, method='barnes_hut', n_iter=200, verbose=2)
-        spatialData = model.fit_transform(distance)
-        spatialLayout = spatialData.tolist()
+        model = None
+        spatialLayout = None
+        kl_divergence_ = 0
+        print(filename.split("."))
+        directory = "public/data/cache"
+        f = filename.split(".")[0]
+        if os.path.isfile(directory+ "/"+f+str(layoutPacketCounter)+".pkl"):
+            print(directory+ "/"+f+str(layoutPacketCounter)+".pkl")
+            pkl_file =  open(directory+ "/"+f+str(layoutPacketCounter)+".pkl", 'rb')
+            model = pickle.load(pkl_file)
+            spatialLayout = model["layout"]
+            kl_divergence_ = model["error"]
+        else:
+            model = TSNE(n_components=2, init=approximate, random_state=1, method='barnes_hut', n_iter=iterations,
+                     verbose=2,
+                     perplexity=perplexity)
+            spatialData = model.fit_transform(distance)
+            spatialLayout = spatialData.tolist()
+            kl_divergence_ = model.kl_divergence_
+            output = open(directory+ "/"+f+str(layoutPacketCounter)+".pkl", 'wb')
+            fileDump = {}
+            fileDump["layout"] = spatialLayout
+            fileDump["error"] = model.kl_divergence_
+            pickle.dump(fileDump, output)
 
         while pauseInterface:
             logger.info("system paused")
 
-
+        # while layoutComputation.pauseInterface:
+        #     logger.info("layout system paused")
 
         # group points into bins to create a heatmap
         # each has 1/100 size of the total width or height
@@ -454,11 +714,11 @@ def layoutGenerationProgressive(data, client):
 
         ## Apply k-means
         print "Applying K-means"
-        nClusters = 7
+        nClusters = data["clusters"]
+        layoutComputation.clusters = nClusters
         kmeans = KMeans(n_clusters=nClusters, random_state=1, verbose=2)
         labels = kmeans.fit_predict(clusterPoints)
         clusterCenters = kmeans.cluster_centers_
-
 
         layouts = []
         for index, point in enumerate(clusterPoints):
@@ -468,11 +728,10 @@ def layoutGenerationProgressive(data, client):
             datum["row"] = i
             datum["col"] = j
             datum["content"] = {
-                "label": int(""+str(labels[index])),
+                "label": int("" + str(labels[index])),
                 "density": matrix[i][j]["density"]
             }
             layouts.append(datum)
-
 
         clusters = []
         clusterTexts = []
@@ -482,7 +741,6 @@ def layoutGenerationProgressive(data, client):
             clusters[i]["keywords"] = []
             clusterTexts.append([])
 
-
         for point in layouts:
             label = point["content"]["label"]
             datum = {}
@@ -490,36 +748,52 @@ def layoutGenerationProgressive(data, client):
             datum["col"] = point["col"]
             clusters[label]["points"].append(datum)
             for p in matrix[datum["row"]][datum["col"]]["points"]:
-                clusterTexts[label].append(contentCache[p["id"]]["content"])
-
+                currentText = re.sub(r'@(\w+)', "", contentCache[p["id"]]["content"])
+                clusterTexts[label].append(currentText)
 
         for i in range(0, nClusters):
             tfidf = TfidfVectorizer(max_features=100,
                                     min_df=1,
-                                    ngram_range=(1, 2),
                                     stop_words=stopset)
             tfs = tfidf.fit_transform(clusterTexts[i])
             scores = zip(tfidf.get_feature_names(),
                          np.asarray(tfs.sum(axis=0)).ravel())
             sortedWordScores = sorted(scores, key=lambda x: x[1], reverse=True)
             for word in sortedWordScores:
-                clusters[i]["keywords"].append({
-                    "word": str(word[0]),
-                    "score": word[1]
-                })
-                clusters[i]["center"] = {
-                    "row": round(clusterCenters[i][0]),
-                    "col": round(clusterCenters[i][1])}
-
-
+                if len(word[0]) > 4:
+                    clusters[i]["keywords"].append({
+                        "word": str(word[0]),
+                        "score": word[1]
+                    })
+            clusters[i]["center"] = {
+                "row": round(clusterCenters[i][0]),
+                "col": round(clusterCenters[i][1])}
         returnData = {}
         returnData["content"] = {"layout": layouts, "clusters": clusters}
         layoutCache = matrix
         returnData["absolute-progress"] = {
             "current": layoutPacketCounter,
             "total": totalLines,
-            "relative": model.rel_measure
+            "relative": kl_divergence_
         }
+
+        print("\n" + str(data) + "\n")
+
+        layoutComputation.rel_measure = data["rel"]
+
+        if data["rel"] == "quality":
+            returnData["absolute-progress"]["relative"] = 5 - kl_divergence_
+        elif data["rel"] == "tsneerror":
+            returnData["absolute-progress"]["relative"] = kl_divergence_
+        elif data["rel"] == "kmeanserror":
+            returnData["absolute-progress"]["relative"] = kmeans.inertia_
+
+        if "pause" in data:
+            returnData["pause"] = 1
+        else:
+            layoutComputation.progressHistories.append(returnData["absolute-progress"])
+            returnData["progress-histories"] = layoutComputation.progressHistories
+        layoutComputation.chunkHistories.append(returnData)
 
         client.send_message('spatial content', returnData)
 
@@ -572,7 +846,7 @@ def handleEvent(client, event, message):
     global playHead
     global contentCache
 
-    logger.info("event " + str(event))
+    logger.info("event|||" + str(event) + "|||message|||" + str(message))
     if event == "request file":
         future = thread_pool.submit(readFileProgressive, message, client)
 
@@ -599,6 +873,47 @@ def handleEvent(client, event, message):
         message = {}
         message["id"] = 1
         message["content"] = returntexts
+        message["keywords"] = tfidfText(returntexts)
+
+        returnKeywords = []
+        if len(returntexts) > 1:
+            for t in returntexts:
+                for keyword in message["keywords"].keys():
+                    if keyword in t["keywords"]:
+                        returnKeywords.append(
+                            {"keyword": keyword, "value": message["keywords"][keyword], "sentiment": t["sentiment"]})
+
+        else:
+            for t in returntexts:
+                for keyword in t["keywords"]:
+                    returnKeywords.append(
+                        {"keyword": keyword, "value": 1, "sentiment": t["sentiment"]})
+
+        message["keywordsSentiment"] = returnKeywords
+
+        message["users"] = {}
+        message["sentiments"] = {}
+
+        for t in returntexts:
+
+            if t["sentiment"] in message["sentiments"]:
+                message["sentiments"][t["sentiment"]] += 1
+            else:
+                message["sentiments"][t["sentiment"]] = 1
+
+            if t["author"] in message["users"] and t["author"] not in user_stop_list:
+                message["users"][t["author"]] += 1
+            else:
+                message["users"][t["author"]] = 1
+
+            otherUsers = re.findall(r'@(\w+)', t["content"])
+            for user in otherUsers:
+                #if user not in user_stop_list:
+                if user in message["users"]:
+                    message["users"][user] += 1
+                else:
+                    message["users"][user] = 1
+
         message["absolute-progress"] = {
             "current": 100,
             "total": 100,
@@ -608,12 +923,39 @@ def handleEvent(client, event, message):
 
     if event == "request keywords":
         ids = message["content"]
-        returnKeywords = []
 
-        for cell in ids:
-            for point in layoutCache[cell["row"]][cell["col"]]["points"]:
-                for keyword in contentCache[point["id"]]["keywords"]:
-                    returnKeywords.append({"keyword": keyword, "sentiment": contentCache[point["id"]]["sentiment"]})
+        returnKeywords = []
+        if len(ids) > 1:
+            texts = []
+            meta = []
+
+            for cell in ids:
+                for point in layoutCache[cell["row"]][cell["col"]]["points"]:
+                    texts.append(contentCache[point["id"]]["content"])
+                    meta.append({"id": point["id"], "sentiment": contentCache[point["id"]]["sentiment"]})
+                    # for keyword in contentCache[point["id"]]["keywords"]:
+                    #     returnKeywords.append({"keyword": keyword, "sentiment": contentCache[point["id"]]["sentiment"]})
+
+            tfidf = TfidfVectorizer(max_features=100,
+                                    min_df=1,
+                                    stop_words=stopset)
+            tfs = tfidf.fit_transform(texts)
+            scores = zip(tfidf.get_feature_names(),
+                         np.asarray(tfs.sum(axis=0)).ravel())
+            sortedWordScores = sorted(scores, key=lambda x: x[1], reverse=True)
+
+            for word in sortedWordScores:
+                for m in meta:
+                    if word[0] in re.sub("[^a-zA-Z]", " ", contentCache[m["id"]]["content"]).lower():
+                        returnKeywords.append(
+                            {"keyword": word[0], "value": word[1], "sentiment": m["sentiment"]})
+
+        else:
+            for cell in ids:
+                for point in layoutCache[cell["row"]][cell["col"]]["points"]:
+                    for keyword in contentCache[point["id"]]["keywords"]:
+                        returnKeywords.append(
+                            {"keyword": keyword, "value": 1, "sentiment": contentCache[point["id"]]["sentiment"]})
 
         ## ids has row and col
         # for index in ids:
@@ -648,8 +990,17 @@ def handleEvent(client, event, message):
 
     if event == "change playhead":
         if layoutComputation.name == message["content"]["target"]:
-            layoutComputation.set_playhead(message["content"]["value"])
-            layoutComputation.pause()
+            #layoutComputation.set_playhead(message["content"]["value"])
+            data = {}
+            data["chunkSize"] = layoutComputation.chunkSize
+            data["content"] = message["content"]["value"] - 1
+            data["perplexity"] = layoutComputation.perplexity
+            data["iterations"] = layoutComputation.iterations
+            data["clusters"] = layoutComputation.clusters
+            data["rel"] = layoutComputation.rel_measure
+            data["pause"] = True
+            future = thread_pool.submit(layoutGenerationProgressive, data, client)
+            #layoutComputation.pause()
         else:
             future = thread_pool.submit(handlePlayHead, message, client)
 

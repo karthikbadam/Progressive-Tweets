@@ -367,6 +367,7 @@ List.prototype.highlight = function (cache) {
         });
 
         _self.listIDStack.push("list" + textId);
+        _self.listDataStack.push(textData);
 
         _self.currentHeight = _self.currentHeight + $("#list" + textId).height();
 
